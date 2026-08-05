@@ -1,6 +1,7 @@
 package io.github.blackshadowhrd.poiloot.loot;
 
 import org.bukkit.NamespacedKey;
+import org.bukkit.Location;
 import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
 import org.bukkit.block.BlockState;
@@ -14,6 +15,7 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
 import java.util.UUID;
+import java.util.Optional;
 
 public final class LootPointRegistrar {
 
@@ -28,23 +30,52 @@ public final class LootPointRegistrar {
     }
 
     public Result register(Player player, NamespacedKey lootTable) {
+        Target target = findTarget(player);
+        if (target == null) {
+            return Result.INVALID_TARGET;
+        }
+
+        Result result = register(target.data(), lootTable);
+        if (result == Result.REGISTERED && target.state() != null) {
+            target.state().update();
+        }
+        return result;
+    }
+
+    public Optional<Inspection> inspect(Player player) {
+        Target target = findTarget(player);
+        if (target == null) {
+            return Optional.empty();
+        }
+
+        String id = target.data().get(idKey, PersistentDataType.STRING);
+        String lootTable = target.data().get(lootTableKey, PersistentDataType.STRING);
+        Location location = target.location();
+        return Optional.of(new Inspection(
+                id != null,
+                id,
+                target.type(),
+                lootTable,
+                location.getWorld().getName() + " (" + location.getBlockX() + ", "
+                        + location.getBlockY() + ", " + location.getBlockZ() + ")"
+        ));
+    }
+
+    private Target findTarget(Player player) {
         Entity targetEntity = player.getTargetEntity(TARGET_DISTANCE);
         if (targetEntity instanceof StorageMinecart minecart) {
-            return register(minecart.getPersistentDataContainer(), lootTable);
+            return new Target(minecart.getPersistentDataContainer(), null, "Chest Minecart", minecart.getLocation());
         }
 
         Block targetBlock = player.getTargetBlockExact(TARGET_DISTANCE);
         BlockState targetState = targetBlock == null ? null : targetBlock.getState();
-        if (!(targetState instanceof Chest || targetState instanceof Barrel)) {
-            return Result.INVALID_TARGET;
+        if (targetState instanceof Chest chest) {
+            return new Target(chest.getPersistentDataContainer(), chest, "Chest", chest.getLocation());
         }
-
-        TileState tileState = (TileState) targetState;
-        Result result = register(tileState.getPersistentDataContainer(), lootTable);
-        if (result == Result.REGISTERED) {
-            tileState.update();
+        if (targetState instanceof Barrel barrel) {
+            return new Target(barrel.getPersistentDataContainer(), barrel, "Barrel", barrel.getLocation());
         }
-        return result;
+        return null;
     }
 
     private Result register(PersistentDataContainer data, NamespacedKey lootTable) {
@@ -61,5 +92,11 @@ public final class LootPointRegistrar {
         REGISTERED,
         ALREADY_REGISTERED,
         INVALID_TARGET
+    }
+
+    public record Inspection(boolean registered, String id, String type, String lootTable, String location) {
+    }
+
+    private record Target(PersistentDataContainer data, TileState state, String type, Location location) {
     }
 }

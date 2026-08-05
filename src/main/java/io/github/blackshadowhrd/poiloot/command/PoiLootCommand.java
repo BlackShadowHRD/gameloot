@@ -28,6 +28,10 @@ public final class PoiLootCommand implements CommandExecutor {
             return true;
         }
 
+        if (args.length == 1 && args[0].equalsIgnoreCase("inspect")) {
+            return inspect(sender);
+        }
+
         if (args.length != 2 || !args[0].equalsIgnoreCase("register")) {
             return false;
         }
@@ -50,5 +54,27 @@ public final class PoiLootCommand implements CommandExecutor {
             ));
         }
         return true;
+    }
+
+    private boolean inspect(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can inspect loot points."));
+            return true;
+        }
+
+        registrar.inspect(player).ifPresentOrElse(inspection -> {
+            sender.sendMessage(Component.text("Registered: " + (inspection.registered() ? "Yes" : "No")));
+            sender.sendMessage(Component.text("Id: " + valueOrDash(inspection.id())));
+            sender.sendMessage(Component.text("Type: " + inspection.type()));
+            sender.sendMessage(Component.text("Loot table: " + valueOrDash(inspection.lootTable())));
+            sender.sendMessage(Component.text("Location: " + inspection.location()));
+        }, () -> sender.sendMessage(Component.text(
+                "Look at a chest, barrel, or chest minecart within 6 blocks."
+        )));
+        return true;
+    }
+
+    private String valueOrDash(String value) {
+        return value == null ? "-" : value;
     }
 }
