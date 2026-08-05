@@ -32,6 +32,11 @@ public final class PoiLootCommand implements CommandExecutor {
             return inspect(sender);
         }
 
+        if (args.length == 1 && (args[0].equalsIgnoreCase("deregister")
+                || args[0].equalsIgnoreCase("de-register"))) {
+            return deregister(sender);
+        }
+
         if (args.length != 2 || !args[0].equalsIgnoreCase("register")) {
             return false;
         }
@@ -49,6 +54,22 @@ public final class PoiLootCommand implements CommandExecutor {
         switch (registrar.register(player, lootTable)) {
             case REGISTERED -> sender.sendMessage(Component.text("Loot point registered with " + lootTable));
             case ALREADY_REGISTERED -> sender.sendMessage(Component.text("That container is already a loot point."));
+            case INVALID_TARGET -> sender.sendMessage(Component.text(
+                    "Look at a chest, barrel, or chest minecart within 6 blocks."
+            ));
+        }
+        return true;
+    }
+
+    private boolean deregister(CommandSender sender) {
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can deregister loot points."));
+            return true;
+        }
+
+        switch (registrar.deregister(player)) {
+            case DEREGISTERED -> sender.sendMessage(Component.text("Loot point deregistered."));
+            case NOT_REGISTERED -> sender.sendMessage(Component.text("That container is not a registered loot point."));
             case INVALID_TARGET -> sender.sendMessage(Component.text(
                     "Look at a chest, barrel, or chest minecart within 6 blocks."
             ));

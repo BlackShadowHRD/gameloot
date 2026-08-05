@@ -61,6 +61,23 @@ public final class LootPointRegistrar {
         ));
     }
 
+    public DeregisterResult deregister(Player player) {
+        Target target = findTarget(player);
+        if (target == null) {
+            return DeregisterResult.INVALID_TARGET;
+        }
+        if (!target.data().has(idKey) && !target.data().has(lootTableKey)) {
+            return DeregisterResult.NOT_REGISTERED;
+        }
+
+        target.data().remove(idKey);
+        target.data().remove(lootTableKey);
+        if (target.state() != null) {
+            target.state().update();
+        }
+        return DeregisterResult.DEREGISTERED;
+    }
+
     private Target findTarget(Player player) {
         Entity targetEntity = player.getTargetEntity(TARGET_DISTANCE);
         if (targetEntity instanceof StorageMinecart minecart) {
@@ -91,6 +108,12 @@ public final class LootPointRegistrar {
     public enum Result {
         REGISTERED,
         ALREADY_REGISTERED,
+        INVALID_TARGET
+    }
+
+    public enum DeregisterResult {
+        DEREGISTERED,
+        NOT_REGISTERED,
         INVALID_TARGET
     }
 
