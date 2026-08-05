@@ -9,3 +9,8 @@ load: POSTWORLD
 authors:
   - DocBoti
 website: https://github.com/BlackShadowHRD/poiloot
+
+commands:
+  poiloot:
+    description: Manages POILoot loot points
+    usage: /poiloot <version|register <loot-table-key>>
