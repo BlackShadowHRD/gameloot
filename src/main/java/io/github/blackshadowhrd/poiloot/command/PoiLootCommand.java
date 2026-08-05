@@ -3,13 +3,20 @@ package io.github.blackshadowhrd.poiloot.command;
 import io.github.blackshadowhrd.poiloot.loot.LootPointRegistrar;
 import net.kyori.adventure.text.Component;
 import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.TabCompleter;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
-public final class PoiLootCommand implements CommandExecutor {
+import java.util.List;
+import java.util.Locale;
+
+public final class PoiLootCommand implements CommandExecutor, TabCompleter {
+
+    private static final List<String> SUBCOMMANDS = List.of("version", "inspect", "register", "deregister");
 
     private final Plugin plugin;
     private final LootPointRegistrar registrar;
@@ -97,5 +104,27 @@ public final class PoiLootCommand implements CommandExecutor {
 
     private String valueOrDash(String value) {
         return value == null ? "-" : value;
+    }
+
+    @Override
+    public List<String> onTabComplete(CommandSender sender, Command command, String alias, String[] args) {
+        if (args.length == 1) {
+            return matching(SUBCOMMANDS, args[0]);
+        }
+        if (args.length == 2 && args[0].equalsIgnoreCase("register")) {
+            List<String> lootTables = Registry.LOOT_TABLES.keyStream()
+                    .map(NamespacedKey::asString)
+                    .sorted()
+                    .toList();
+            return matching(lootTables, args[1]);
+        }
+        return List.of();
+    }
+
+    private List<String> matching(List<String> candidates, String input) {
+        String prefix = input.toLowerCase(Locale.ROOT);
+        return candidates.stream()
+                .filter(candidate -> candidate.startsWith(prefix))
+                .toList();
     }
 }
