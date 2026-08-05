@@ -1,0 +1,11 @@
+name: POILoot
+description: '${description}'
+version: '${version}'
+
+main: io.github.blackshadowhrd.poiloot.PoiLootPlugin
+api-version: '26.2'
+load: POSTWORLD
+
+authors:
+  - DocBoti
+website: https://github.com/BlackShadowHRD/poiloot
