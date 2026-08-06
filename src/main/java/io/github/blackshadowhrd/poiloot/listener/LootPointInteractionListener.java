@@ -1,8 +1,10 @@
 package io.github.blackshadowhrd.poiloot.listener;
 
 import io.github.blackshadowhrd.poiloot.model.LootPoint;
+import io.github.blackshadowhrd.poiloot.service.InMemoryClaimService;
 import io.github.blackshadowhrd.poiloot.service.LootGenerationService;
 import io.github.blackshadowhrd.poiloot.service.LootPointLookupService;
+import io.github.blackshadowhrd.poiloot.service.LootSessionService;
 import io.github.blackshadowhrd.poiloot.service.PrivateInventoryService;
 import io.github.blackshadowhrd.poiloot.target.LootPointTarget;
 import net.kyori.adventure.text.Component;
@@ -26,22 +28,26 @@ import java.util.logging.Logger;
 
 public final class LootPointInteractionListener implements Listener {
 
-    private static final int PRIVATE_INVENTORY_SIZE = 27;
-
     private final LootPointLookupService lookupService;
     private final LootGenerationService generationService;
     private final PrivateInventoryService inventoryService;
+    private final InMemoryClaimService claimService;
+    private final LootSessionService sessionService;
     private final Logger logger;
 
     public LootPointInteractionListener(
             Plugin plugin,
             LootPointLookupService lookupService,
             LootGenerationService generationService,
-            PrivateInventoryService inventoryService
+            PrivateInventoryService inventoryService,
+            InMemoryClaimService claimService,
+            LootSessionService sessionService
     ) {
         this.lookupService = lookupService;
         this.generationService = generationService;
         this.inventoryService = inventoryService;
+        this.claimService = claimService;
+        this.sessionService = sessionService;
         logger = plugin.getLogger();
     }
 
@@ -71,6 +77,18 @@ public final class LootPointInteractionListener implements Listener {
 
     private void openPrivateLoot(Player player, LootPointTarget target) {
         LootPoint lootPoint = target.lootPoint();
+        if (claimService.isClaimed(player.getUniqueId(), lootPoint.id())) {
+            player.sendMessage(Component.text("You have already claimed this loot point.", NamedTextColor.YELLOW));
+            return;
+        }
+
+        Inventory existingInventory = sessionService.findInventory(player.getUniqueId(), lootPoint.id())
+                .orElse(null);
+        if (existingInventory != null) {
+            inventoryService.openInventory(player, existingInventory);
+            return;
+        }
+
         if (generationService.resolveLootTable(lootPoint.lootTable()).isEmpty()) {
             player.sendMessage(Component.text("Unknown loot table: " + lootPoint.lootTable(), NamedTextColor.RED));
             logger.warning("Missing loot table '" + lootPoint.lootTable() + "' for loot point "
@@ -80,12 +98,7 @@ public final class LootPointInteractionListener implements Listener {
 
         try {
             List<ItemStack> items = generationService.generateLoot(lootPoint, player, target.location());
-            Inventory inventory = inventoryService.createInventory(
-                    lootPoint,
-                    player,
-                    PRIVATE_INVENTORY_SIZE,
-                    items
-            );
+            Inventory inventory = sessionService.createSession(lootPoint, player, items);
             inventoryService.openInventory(player, inventory);
         } catch (RuntimeException exception) {
             player.sendMessage(Component.text("Unable to generate loot for this loot point.", NamedTextColor.RED));

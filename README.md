@@ -5,8 +5,8 @@ per-player, one-time loot at registered points of interest.
 
 The current development version can register block containers and chest
 minecarts as loot points, then generate a private inventory from the configured
-loot table when a player interacts with one. Per-player claims are not yet
-implemented, so reopening a loot point currently generates fresh loot.
+loot table when a player interacts with one. Claims and active loot sessions
+are currently held in memory and reset when the server restarts.
 
 ## Requirements
 
@@ -54,8 +54,15 @@ with the world. Deregistration removes only these POILoot-owned values.
 
 Interacting with a registered loot point cancels access to its physical
 inventory and opens a private 27-slot inventory instead. Loot is generated from
-the stored loot table for every interaction. Claim persistence and session
-recovery are intentionally not part of the current milestone.
+the stored loot table once per active player and loot-point session. Closing an
+inventory before taking an item preserves the same remaining contents for the
+next interaction.
+
+A claim is recorded when the player successfully takes the first item. Closing
+the inventory after that point discards its remaining contents, and further
+access is refused for that player. Other players have independent claims and
+sessions. Claim persistence and restart recovery are not part of the current
+milestone.
 
 ## Building
 

@@ -1,7 +1,7 @@
 package io.github.blackshadowhrd.poiloot.service;
 
 import io.github.blackshadowhrd.poiloot.model.LootPoint;
-import net.kyori.adventure.text.Component;
+import io.github.blackshadowhrd.poiloot.inventory.PrivateLootInventoryHolder;
 import org.bukkit.Server;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
@@ -29,7 +29,13 @@ public final class PrivateInventoryService {
         Objects.requireNonNull(player, "player");
         Objects.requireNonNull(items, "items");
 
-        Inventory inventory = server.createInventory(null, size, Component.text("POILoot"));
+        PrivateLootInventoryHolder holder = new PrivateLootInventoryHolder(
+                server,
+                player.getUniqueId(),
+                lootPoint.id(),
+                size
+        );
+        Inventory inventory = holder.getInventory();
         ItemStack[] contents = items.stream()
                 .map(ItemStack::clone)
                 .toArray(ItemStack[]::new);

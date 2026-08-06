@@ -17,8 +17,11 @@ Implemented:
 - Registered loot-table key completion
 - Private 27-slot loot generation for registered containers
 - Physical-container access prevention for registered loot points
+- In-memory per-player claims keyed by player and loot-point UUID
+- Stable active loot sessions that do not reroll on reopen
+- Protected private inventories that reject player-item insertion
 
 Not yet implemented:
 
-- Per-player claim tracking
-- One-time loot distribution
+- Persistent claim tracking
+- Session recovery after a server restart

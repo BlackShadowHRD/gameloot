@@ -26,6 +26,11 @@ All notable changes to POILoot are documented in this file.
   minecarts.
 - Interaction handling that prevents access to a registered physical
   container.
+- In-memory per-player claim tracking keyed by player and loot-point UUID.
+- Stable loot sessions that preserve remaining items until the first item is
+  taken and the inventory is closed.
+- Custom inventory holders and guarded click/drag handling for private loot
+  inventories.
 
 ### Changed
 
@@ -41,5 +46,5 @@ All notable changes to POILoot are documented in this file.
 
 ### Not yet implemented
 
-- Per-player claim tracking.
-- One-time loot distribution.
+- Persistent claim tracking.
+- Session recovery after a server restart.
