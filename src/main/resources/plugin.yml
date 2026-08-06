@@ -10,7 +10,7 @@ authors:
   - DocBoti
 website: https://github.com/BlackShadowHRD/poiloot
 
-commands:
-  poiloot:
-    description: Manages POILoot loot points
-    usage: /poiloot <version|inspect|register <loot-table-key>|deregister>
+permissions:
+  poiloot.admin:
+    description: Allows management and inspection of POILoot loot points
+    default: op
