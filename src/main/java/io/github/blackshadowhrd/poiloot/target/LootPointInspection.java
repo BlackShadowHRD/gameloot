@@ -9,6 +9,7 @@ import java.util.Optional;
 
 public record LootPointInspection(
         Optional<LootPoint> lootPoint,
+        boolean markerPresent,
         LootPointType type,
         String displayType,
         Location location

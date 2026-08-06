@@ -15,6 +15,12 @@ repositories {
 
 dependencies {
     compileOnly("io.papermc.paper:paper-api:26.2.build.+")
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.12.2")
+    testCompileOnly("io.papermc.paper:paper-api:26.2.build.+")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.12.2")
+    testRuntimeOnly("org.xerial:sqlite-jdbc:3.49.1.0")
+    testRuntimeOnly("io.papermc.paper:paper-api:26.2.build.+")
 }
 
 java {
@@ -22,6 +28,10 @@ java {
 }
 
 tasks {
+    test {
+        useJUnitPlatform()
+    }
+
     build {
         dependsOn(shadowJar)
     }

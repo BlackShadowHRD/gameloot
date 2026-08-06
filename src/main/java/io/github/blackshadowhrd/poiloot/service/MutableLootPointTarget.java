@@ -25,7 +25,7 @@ sealed interface MutableLootPointTarget permits MutableBlockLootPointTarget, Mut
 
     LootPointTarget withLootPoint(LootPoint lootPoint);
 
-    void persist();
+    boolean persist();
 }
 
 record MutableBlockLootPointTarget(Block block, Container state, String displayType)
@@ -59,8 +59,8 @@ record MutableBlockLootPointTarget(Block block, Container state, String displayT
     }
 
     @Override
-    public void persist() {
-        state.update();
+    public boolean persist() {
+        return state.update();
     }
 }
 
@@ -99,7 +99,8 @@ record MutableEntityLootPointTarget(StorageMinecart entity) implements MutableLo
     }
 
     @Override
-    public void persist() {
+    public boolean persist() {
         // Entity PDC changes are applied directly to the live entity.
+        return true;
     }
 }

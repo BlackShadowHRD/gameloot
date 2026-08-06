@@ -1,7 +1,9 @@
 package io.github.blackshadowhrd.poiloot.service;
 
 import io.github.blackshadowhrd.poiloot.model.LootPoint;
+import io.github.blackshadowhrd.poiloot.repository.model.LootPointRecord;
 import io.github.blackshadowhrd.poiloot.target.LootPointInspection;
+import io.github.blackshadowhrd.poiloot.target.LootPointResolution;
 import io.github.blackshadowhrd.poiloot.target.LootPointTarget;
 import org.bukkit.Location;
 import org.bukkit.Material;
@@ -21,6 +23,8 @@ import org.bukkit.plugin.Plugin;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public final class LootPointLookupService {
@@ -28,35 +32,43 @@ public final class LootPointLookupService {
     private final NamespacedKey idKey;
     private final NamespacedKey lootTableKey;
     private final Logger logger;
+    private final Plugin plugin;
+    private final LootPointPersistenceService persistenceService;
 
-    public LootPointLookupService(Plugin plugin) {
+    public LootPointLookupService(Plugin plugin, LootPointPersistenceService persistenceService) {
+        this.plugin = plugin;
+        this.persistenceService = persistenceService;
         idKey = new NamespacedKey(plugin, "loot_point_id");
         lootTableKey = new NamespacedKey(plugin, "loot_table");
         logger = plugin.getLogger();
     }
 
-    public Optional<LootPointTarget> findTarget(Player player, double maxDistance) {
-        return findSupportedTarget(player, maxDistance)
-                .flatMap(target -> readLootPoint(target).map(target::withLootPoint));
+    public LootPointResolution resolveTarget(Block block) {
+        return supportedBlock(block).map(this::resolveTarget)
+                .orElseGet(() -> unmarkedResolution());
     }
 
-    public Optional<LootPointTarget> findTarget(Block block) {
-        return supportedBlock(block)
-                .flatMap(target -> readLootPoint(target).map(target::withLootPoint));
+    public LootPointResolution resolveTarget(Entity entity) {
+        return supportedEntity(entity).map(this::resolveTarget)
+                .orElseGet(() -> unmarkedResolution());
     }
 
-    public Optional<LootPointTarget> findTarget(Entity entity) {
-        return supportedEntity(entity)
-                .flatMap(target -> readLootPoint(target).map(target::withLootPoint));
-    }
+    public CompletableFuture<Optional<LootPointInspection>> inspectTarget(Player player, double maxDistance) {
+        Optional<MutableLootPointTarget> supportedTarget = findSupportedTarget(player, maxDistance);
+        if (supportedTarget.isEmpty()) {
+            return CompletableFuture.completedFuture(Optional.empty());
+        }
 
-    public Optional<LootPointInspection> inspectTarget(Player player, double maxDistance) {
-        return findSupportedTarget(player, maxDistance).map(target -> new LootPointInspection(
-                readLootPoint(target),
-                target.type(),
-                target.displayType(),
-                target.location()
-        ));
+        MutableLootPointTarget target = supportedTarget.get();
+        LootPointResolution resolution = resolveTarget(target);
+        if (!resolution.marked()) {
+            return CompletableFuture.completedFuture(Optional.of(inspection(target, Optional.empty(), false)));
+        }
+        return resolution.target().thenApply(resolved -> Optional.of(inspection(
+                target,
+                resolved.map(LootPointTarget::lootPoint),
+                true
+        )));
     }
 
     Optional<MutableLootPointTarget> findSupportedTarget(Player player, double maxDistance) {
@@ -94,31 +106,189 @@ public final class LootPointLookupService {
         return Optional.empty();
     }
 
-    private Optional<LootPoint> readLootPoint(MutableLootPointTarget target) {
+    Optional<UUID> readMarker(MutableLootPointTarget target) {
         PersistentDataContainer data = target.data();
-        if (!data.has(idKey) && !data.has(lootTableKey)) {
+        if (!data.has(idKey)) {
             return Optional.empty();
         }
 
         try {
             String storedId = data.get(idKey, PersistentDataType.STRING);
-            String storedLootTable = data.get(lootTableKey, PersistentDataType.STRING);
-            if (storedId == null || storedLootTable == null) {
-                logMalformed(target, "missing ID or loot-table key");
+            if (storedId == null) {
+                logMalformed(target, "loot-point ID is not stored as a string");
                 return Optional.empty();
             }
-
-            UUID id = UUID.fromString(storedId);
-            NamespacedKey lootTable = NamespacedKey.fromString(storedLootTable);
-            if (lootTable == null) {
-                logMalformed(target, "invalid loot-table key '" + storedLootTable + "'");
-                return Optional.empty();
-            }
-            return Optional.of(new LootPoint(id, lootTable, target.type()));
+            return Optional.of(UUID.fromString(storedId));
         } catch (IllegalArgumentException exception) {
             logMalformed(target, exception.getMessage());
             return Optional.empty();
         }
+    }
+
+    boolean hasMarker(MutableLootPointTarget target) {
+        return target.data().has(idKey);
+    }
+
+    void writeMarker(MutableLootPointTarget target, UUID id) {
+        target.data().set(idKey, PersistentDataType.STRING, id.toString());
+        target.data().remove(lootTableKey);
+    }
+
+    void removeMarker(MutableLootPointTarget target) {
+        target.data().remove(idKey);
+        target.data().remove(lootTableKey);
+    }
+
+    LootPointResolution resolveTarget(MutableLootPointTarget target) {
+        PersistentDataContainer data = target.data();
+        if (!data.has(idKey)) {
+            return unmarkedResolution();
+        }
+
+        Optional<UUID> marker = readMarker(target);
+        if (marker.isEmpty()) {
+            return new LootPointResolution(true, CompletableFuture.completedFuture(Optional.empty()));
+        }
+
+        UUID id = marker.get();
+        Optional<LootPointRecord> cached = persistenceService.find(id);
+        if (cached.isPresent()) {
+            if (!matches(target, cached.get())) {
+                logger.severe("Loot point marker " + id + " on " + target.description()
+                        + " does not match its database target metadata");
+                return new LootPointResolution(true, CompletableFuture.completedFuture(Optional.empty()));
+            }
+            removeObsoleteMetadata(target);
+            return resolved(target, cached.get().lootPoint());
+        }
+
+        String legacyLootTable;
+        try {
+            legacyLootTable = data.get(lootTableKey, PersistentDataType.STRING);
+        } catch (IllegalArgumentException exception) {
+            logMalformed(target, "legacy loot-table value has the wrong PDC type");
+            return new LootPointResolution(true, CompletableFuture.completedFuture(Optional.empty()));
+        }
+        NamespacedKey key = legacyLootTable == null ? null : NamespacedKey.fromString(legacyLootTable);
+        if (key == null) {
+            logger.severe("Loot point marker " + id + " on " + target.description()
+                    + " has no database record and no valid legacy loot-table key");
+            return new LootPointResolution(true, CompletableFuture.completedFuture(Optional.empty()));
+        }
+
+        LootPointRecord legacyRecord = record(target, id, key, null);
+        String targetDescription = target.description();
+        CompletableFuture<Optional<LootPointTarget>> migration = persistenceService.migrateLegacy(legacyRecord)
+                .thenCompose(record -> runOnMainThread(() -> record.flatMap(found -> {
+                    MutableLootPointTarget current = refresh(target).orElse(target);
+                    if (!matches(current, found)) {
+                        logger.severe("Legacy loot point " + id + " on " + current.description()
+                                + " conflicts with its existing database target metadata");
+                        return Optional.empty();
+                    }
+                    removeObsoleteMetadata(current);
+                    logger.info("Migrated legacy loot point " + id + " on " + current.description());
+                    return Optional.of(current.withLootPoint(found.lootPoint()));
+                })))
+                .exceptionally(exception -> {
+                    logger.log(Level.SEVERE, "Failed to migrate legacy loot point " + id + " on "
+                            + targetDescription, exception);
+                    return Optional.empty();
+                });
+        return new LootPointResolution(true, migration);
+    }
+
+    LootPointRecord record(
+            MutableLootPointTarget target,
+            UUID id,
+            NamespacedKey lootTable,
+            UUID createdBy
+    ) {
+        Location location = target.location();
+        UUID entityId = target instanceof MutableEntityLootPointTarget entityTarget
+                ? entityTarget.entity().getUniqueId()
+                : null;
+        return new LootPointRecord(
+                id,
+                location.getWorld().getUID(),
+                target.type(),
+                location.getBlockX(),
+                location.getBlockY(),
+                location.getBlockZ(),
+                entityId,
+                lootTable,
+                System.currentTimeMillis(),
+                createdBy
+        );
+    }
+
+    private void removeObsoleteMetadata(MutableLootPointTarget target) {
+        if (target.data().has(lootTableKey)) {
+            target.data().remove(lootTableKey);
+            target.persist();
+        }
+    }
+
+    Optional<MutableLootPointTarget> refresh(MutableLootPointTarget target) {
+        if (target instanceof MutableBlockLootPointTarget blockTarget) {
+            return supportedBlock(blockTarget.block());
+        }
+        if (target instanceof MutableEntityLootPointTarget entityTarget) {
+            return supportedEntity(entityTarget.entity());
+        }
+        return Optional.empty();
+    }
+
+    private boolean matches(MutableLootPointTarget target, LootPointRecord record) {
+        Location location = target.location();
+        if (!record.worldUuid().equals(location.getWorld().getUID())
+                || record.targetType() != target.type()
+                || record.x() != location.getBlockX()
+                || record.y() != location.getBlockY()
+                || record.z() != location.getBlockZ()) {
+            return false;
+        }
+        if (target instanceof MutableEntityLootPointTarget entityTarget) {
+            return entityTarget.entity().getUniqueId().equals(record.entityUuid());
+        }
+        return record.entityUuid() == null;
+    }
+
+    private LootPointInspection inspection(
+            MutableLootPointTarget target,
+            Optional<LootPoint> lootPoint,
+            boolean markerPresent
+    ) {
+        return new LootPointInspection(
+                lootPoint,
+                markerPresent,
+                target.type(),
+                target.displayType(),
+                target.location()
+        );
+    }
+
+    private LootPointResolution resolved(MutableLootPointTarget target, LootPoint lootPoint) {
+        return new LootPointResolution(
+                true,
+                CompletableFuture.completedFuture(Optional.of(target.withLootPoint(lootPoint)))
+        );
+    }
+
+    private LootPointResolution unmarkedResolution() {
+        return new LootPointResolution(false, CompletableFuture.completedFuture(Optional.empty()));
+    }
+
+    private <T> CompletableFuture<T> runOnMainThread(java.util.function.Supplier<T> supplier) {
+        CompletableFuture<T> future = new CompletableFuture<>();
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            try {
+                future.complete(supplier.get());
+            } catch (RuntimeException exception) {
+                future.completeExceptionally(exception);
+            }
+        });
+        return future;
     }
 
     private void logMalformed(MutableLootPointTarget target, String reason) {

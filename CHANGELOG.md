@@ -31,6 +31,13 @@ All notable changes to POILoot are documented in this file.
   taken and the inventory is closed.
 - Custom inventory holders and guarded click/drag handling for private loot
   inventories.
+- SQLite schema management with automatic versioned migrations.
+- Persistent loot-point registration records linked to world targets by their
+  PDC UUID markers.
+- Persistent per-player claims with an in-memory cache for synchronous gameplay
+  checks.
+- Repository integration tests covering schema creation, registration CRUD,
+  duplicate handling, claims, cascading deletion, and compensation restoration.
 
 ### Changed
 
@@ -38,13 +45,25 @@ All notable changes to POILoot are documented in this file.
   `poiloot.admin`.
 - Invalid-target guidance now uses the concise message: `Look at a supported
   container within 6 blocks.`
+- Loot-point metadata is now authoritative in SQLite; targets retain only their
+  loot-point UUID in PDC.
+- Registration, deregistration, inspection, and interaction now use repository-
+  backed persistence services.
+- Claim writes run on a dedicated database executor, while Bukkit world and
+  inventory operations remain on the server thread.
+- The first loot transfer waits for its claim to be durably persisted.
+- Existing UUID and loot-table PDC registrations migrate automatically when
+  inspected or interacted with.
 
 ### Fixed
 
 - Loot-table validation now queries the server's loaded loot tables, allowing
   valid datapack-defined keys as well as built-in keys.
+- Deregistration compensates for PDC-removal failures by restoring the deleted
+  loot-point record and its claims.
+- Inspection reports when a PDC UUID has no matching database record.
 
 ### Not yet implemented
 
-- Persistent claim tracking.
 - Session recovery after a server restart.
+- Persistent generated inventory contents for unclaimed sessions.

@@ -5,8 +5,9 @@ per-player, one-time loot at registered points of interest.
 
 The current development version can register block containers and chest
 minecarts as loot points, then generate a private inventory from the configured
-loot table when a player interacts with one. Claims and active loot sessions
-are currently held in memory and reset when the server restarts.
+loot table when a player interacts with one. Loot-point metadata and per-player
+claims are stored in SQLite. Active inventory sessions remain in memory and
+reset when the server restarts.
 
 ## Requirements
 
@@ -41,14 +42,26 @@ manually.
 
 ## Loot-point data
 
-POILoot stores its registration metadata in the container's
-`PersistentDataContainer`:
+POILoot stores authoritative registration metadata in:
+
+```text
+plugins/POILoot/poiloot.db
+```
+
+The database records the loot-point UUID, world and physical target, loot-table
+key, creation time, and registering player. The target's
+`PersistentDataContainer` retains only:
 
 - `poiloot:loot_point_id` — a unique UUID
-- `poiloot:loot_table` — the namespaced loot-table key
 
-This metadata is stored with the chest, barrel, or chest minecart and persists
-with the world. Deregistration removes only these POILoot-owned values.
+This UUID links the chest, barrel, copper container, or chest minecart to its
+database record. Deregistration removes the database record, its associated
+claims, and the POILoot-owned PDC marker.
+
+Development containers registered by older builds may also contain a
+`poiloot:loot_table` PDC value. POILoot migrates these registrations into
+SQLite when they are inspected or interacted with, retaining their UUID and
+removing the obsolete value only after a successful migration.
 
 ## Private loot
 
@@ -61,8 +74,13 @@ next interaction.
 A claim is recorded when the player successfully takes the first item. Closing
 the inventory after that point discards its remaining contents, and further
 access is refused for that player. Other players have independent claims and
-sessions. Claim persistence and restart recovery are not part of the current
-milestone.
+sessions. Claims persist across server restarts. The first transfer waits for
+the claim write to succeed so a database error cannot make the same loot
+claimable again; failures are logged and access is blocked safely.
+
+Unclaimed active sessions are deliberately not persisted. Restarting the
+server discards those temporary generated inventories, so reopening after a
+restart generates a new session.
 
 ## Building
 

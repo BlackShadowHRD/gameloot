@@ -110,16 +110,33 @@ public final class PoiLootCommand {
             sender.sendMessage(Component.text("Unknown loot table: " + lootTable, NamedTextColor.RED));
             return 0;
         }
-        switch (registrar.register(player, lootTable)) {
+        registrar.register(player, lootTable).whenComplete((result, exception) ->
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to register this loot point.", NamedTextColor.RED));
+                        return;
+                    }
+                    sendRegistrationResult(sender, lootTable, result);
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendRegistrationResult(
+            CommandSender sender,
+            NamespacedKey lootTable,
+            LootPointRegistrar.Result result
+    ) {
+        switch (result) {
             case REGISTERED -> {
                 sender.sendMessage(Component.text("Loot point registered with " + lootTable, NamedTextColor.GREEN));
-                return Command.SINGLE_SUCCESS;
             }
             case ALREADY_REGISTERED ->
                     sender.sendMessage(Component.text("That container is already a loot point.", NamedTextColor.YELLOW));
             case INVALID_TARGET -> sender.sendMessage(SUPPORTED_CONTAINER_HELP);
+            case PERSISTENCE_FAILURE ->
+                    sender.sendMessage(Component.text("Unable to persist this loot point.", NamedTextColor.RED));
         }
-        return 0;
     }
 
     private int deregister(CommandContext<CommandSourceStack> context) {
@@ -129,16 +146,33 @@ public final class PoiLootCommand {
             return 0;
         }
 
-        switch (registrar.deregister(player)) {
+        registrar.deregister(player).whenComplete((result, exception) ->
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to deregister this loot point.", NamedTextColor.RED));
+                        return;
+                    }
+                    sendDeregistrationResult(sender, result);
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendDeregistrationResult(CommandSender sender, LootPointRegistrar.DeregisterResult result) {
+        switch (result) {
             case DEREGISTERED -> {
                 sender.sendMessage(Component.text("Loot point deregistered."));
-                return Command.SINGLE_SUCCESS;
             }
             case NOT_REGISTERED ->
                     sender.sendMessage(Component.text("That container is not a registered loot point."));
             case INVALID_TARGET -> sender.sendMessage(SUPPORTED_CONTAINER_HELP);
+            case MISSING_DATABASE_RECORD -> sender.sendMessage(Component.text(
+                    "Loot point data is missing from the database. Check the server log.",
+                    NamedTextColor.RED
+            ));
+            case PERSISTENCE_FAILURE ->
+                    sender.sendMessage(Component.text("Unable to persist deregistration.", NamedTextColor.RED));
         }
-        return 0;
     }
 
     private int inspect(CommandContext<CommandSourceStack> context) {
@@ -148,7 +182,25 @@ public final class PoiLootCommand {
             return 0;
         }
 
-        return lookupService.inspectTarget(player, TARGET_DISTANCE).map(inspection -> {
+        lookupService.inspectTarget(player, TARGET_DISTANCE).whenComplete((inspection, exception) ->
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text(
+                                "Unable to inspect this loot point.",
+                                NamedTextColor.RED
+                        ));
+                        return;
+                    }
+                    inspection.ifPresentOrElse(
+                            value -> sendInspection(sender, value),
+                            () -> sender.sendMessage(SUPPORTED_CONTAINER_HELP)
+                    );
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendInspection(CommandSender sender, LootPointInspection inspection) {
             sender.sendMessage(Component.text("Registered: " + (inspection.lootPoint().isPresent() ? "Yes" : "No")));
             sender.sendMessage(Component.text("Id: " + valueOrDash(
                     inspection.lootPoint().map(LootPoint::id).map(Object::toString).orElse(null)
@@ -158,11 +210,12 @@ public final class PoiLootCommand {
                     inspection.lootPoint().map(LootPoint::lootTable).map(NamespacedKey::asString).orElse(null)
             )));
             sender.sendMessage(Component.text("Location: " + formatLocation(inspection)));
-            return Command.SINGLE_SUCCESS;
-        }).orElseGet(() -> {
-            sender.sendMessage(SUPPORTED_CONTAINER_HELP);
-            return 0;
-        });
+            if (inspection.markerPresent() && inspection.lootPoint().isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "Diagnostic: the PDC marker has no matching database record. Check the server log.",
+                        NamedTextColor.RED
+                ));
+            }
     }
 
     private CompletableFuture<Suggestions> suggestLootTables(

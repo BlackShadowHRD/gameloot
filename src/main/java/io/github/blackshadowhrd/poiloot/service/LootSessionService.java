@@ -59,10 +59,26 @@ public final class LootSessionService {
         return true;
     }
 
+    public boolean hasTakenItem(PrivateLootInventoryHolder holder) {
+        LootSession session = sessions.get(new SessionKey(holder.playerId(), holder.lootPointId()));
+        return session != null && session.inventory() == holder.getInventory() && session.itemTaken();
+    }
+
     public void closeSession(PrivateLootInventoryHolder holder) {
         SessionKey key = new SessionKey(holder.playerId(), holder.lootPointId());
         LootSession session = sessions.get(key);
         if (session == null || session.inventory() != holder.getInventory() || !session.itemTaken()) {
+            return;
+        }
+
+        sessions.remove(key);
+        session.inventory().clear();
+    }
+
+    public void discardSession(PrivateLootInventoryHolder holder) {
+        SessionKey key = new SessionKey(holder.playerId(), holder.lootPointId());
+        LootSession session = sessions.get(key);
+        if (session == null || session.inventory() != holder.getInventory()) {
             return;
         }
 

@@ -9,7 +9,9 @@ Implemented:
 - Native Paper Brigadier `/poiloot` command tree
 - Plugin name and version reporting
 - Registration of chests, barrels, and chest minecarts as loot points
-- Persistent UUID and loot-table metadata
+- SQLite-backed authoritative loot-point metadata
+- UUID-only PDC links between physical targets and database records
+- Automatic migration of legacy UUID and loot-table PDC registrations
 - Duplicate-registration detection
 - Loot-point inspection
 - Loot-point deregistration
@@ -17,11 +19,16 @@ Implemented:
 - Registered loot-table key completion
 - Private 27-slot loot generation for registered containers
 - Physical-container access prevention for registered loot points
-- In-memory per-player claims keyed by player and loot-point UUID
+- Persistent per-player claims keyed by player and loot-point UUID
+- In-memory claim cache loaded during startup
+- Atomic, duplicate-safe claim insertion
 - Stable active loot sessions that do not reroll on reopen
 - Protected private inventories that reject player-item insertion
+- Versioned database schema and clean database-executor shutdown
+- Registration and deregistration failure compensation
+- Repository integration tests
 
 Not yet implemented:
 
-- Persistent claim tracking
 - Session recovery after a server restart
+- Persistent generated inventory contents for unclaimed sessions
