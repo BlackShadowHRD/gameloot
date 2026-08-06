@@ -15,9 +15,10 @@ Implemented:
 - Loot-point deregistration
 - `poiloot.admin` permission checks and permission-aware suggestions
 - Registered loot-table key completion
+- Private 27-slot loot generation for registered containers
+- Physical-container access prevention for registered loot points
 
 Not yet implemented:
 
-- Loot generation
 - Per-player claim tracking
 - One-time loot distribution

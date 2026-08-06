@@ -1,6 +1,7 @@
 package io.github.blackshadowhrd.poiloot;
 
 import io.github.blackshadowhrd.poiloot.command.PoiLootCommand;
+import io.github.blackshadowhrd.poiloot.listener.LootPointInteractionListener;
 import io.github.blackshadowhrd.poiloot.service.LootGenerationService;
 import io.github.blackshadowhrd.poiloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.poiloot.service.LootPointRegistrar;
@@ -17,6 +18,11 @@ public final class PoiLootPlugin extends JavaPlugin {
         LootGenerationService generationService = new LootGenerationService(getServer());
         PrivateInventoryService inventoryService = new PrivateInventoryService(getServer());
         PoiLootCommand command = new PoiLootCommand(this, registrar, lookupService, generationService);
+
+        getServer().getPluginManager().registerEvents(
+                new LootPointInteractionListener(this, lookupService, generationService, inventoryService),
+                this
+        );
 
         getLifecycleManager().registerEventHandler(
                 LifecycleEvents.COMMANDS,

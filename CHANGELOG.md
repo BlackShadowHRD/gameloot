@@ -21,6 +21,11 @@ All notable changes to POILoot are documented in this file.
 - Persistent loot-point UUID and loot-table metadata using
   `PersistentDataContainer`.
 - Duplicate-registration detection and player-facing Adventure messages.
+- Private loot generation using Paper loot tables and `LootContext`.
+- Private 27-slot inventories for registered block containers and chest
+  minecarts.
+- Interaction handling that prevents access to a registered physical
+  container.
 
 ### Changed
 
@@ -36,6 +41,5 @@ All notable changes to POILoot are documented in this file.
 
 ### Not yet implemented
 
-- Loot generation.
 - Per-player claim tracking.
 - One-time loot distribution.

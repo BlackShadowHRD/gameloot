@@ -3,9 +3,10 @@
 POILoot is a Java plugin for Paper Minecraft 26.2. It is being built to provide
 per-player, one-time loot at registered points of interest.
 
-The current development version can register chests, barrels, and chest
-minecarts as loot points. Loot generation and per-player claims are not yet
-implemented.
+The current development version can register block containers and chest
+minecarts as loot points, then generate a private inventory from the configured
+loot table when a player interacts with one. Per-player claims are not yet
+implemented, so reopening a loot point currently generates fresh loot.
 
 ## Requirements
 
@@ -48,6 +49,13 @@ POILoot stores its registration metadata in the container's
 
 This metadata is stored with the chest, barrel, or chest minecart and persists
 with the world. Deregistration removes only these POILoot-owned values.
+
+## Private loot
+
+Interacting with a registered loot point cancels access to its physical
+inventory and opens a private 27-slot inventory instead. Loot is generated from
+the stored loot table for every interaction. Claim persistence and session
+recovery are intentionally not part of the current milestone.
 
 ## Building
 
