@@ -6,7 +6,11 @@ import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mojang.brigadier.tree.LiteralCommandNode;
-import io.github.blackshadowhrd.poiloot.loot.LootPointRegistrar;
+import io.github.blackshadowhrd.poiloot.model.LootPoint;
+import io.github.blackshadowhrd.poiloot.service.LootGenerationService;
+import io.github.blackshadowhrd.poiloot.service.LootPointLookupService;
+import io.github.blackshadowhrd.poiloot.service.LootPointRegistrar;
+import io.github.blackshadowhrd.poiloot.target.LootPointInspection;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
@@ -27,15 +31,25 @@ public final class PoiLootCommand {
 
     private static final String ADMIN_PERMISSION = "poiloot.admin";
     private static final String LOOT_TABLE_ARGUMENT = "loot-table";
+    private static final double TARGET_DISTANCE = 6;
     private static final Component SUPPORTED_CONTAINER_HELP =
             Component.text("Look at a supported container within 6 blocks.");
 
     private final Plugin plugin;
     private final LootPointRegistrar registrar;
+    private final LootPointLookupService lookupService;
+    private final LootGenerationService generationService;
 
-    public PoiLootCommand(Plugin plugin, LootPointRegistrar registrar) {
+    public PoiLootCommand(
+            Plugin plugin,
+            LootPointRegistrar registrar,
+            LootPointLookupService lookupService,
+            LootGenerationService generationService
+    ) {
         this.plugin = plugin;
         this.registrar = registrar;
+        this.lookupService = lookupService;
+        this.generationService = generationService;
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand() {
@@ -49,6 +63,9 @@ public final class PoiLootCommand {
                                 .suggests(this::suggestLootTables)
                                 .executes(this::register)))
                 .then(Commands.literal("deregister")
+                        .requires(PoiLootCommand::hasAdminPermission)
+                        .executes(this::deregister))
+                .then(Commands.literal("de-register")
                         .requires(PoiLootCommand::hasAdminPermission)
                         .executes(this::deregister))
                 .then(Commands.literal("inspect")
@@ -89,7 +106,7 @@ public final class PoiLootCommand {
 
         NamespacedKey lootTable = context.getArgument(LOOT_TABLE_ARGUMENT, NamespacedKey.class);
 
-        if (plugin.getServer().getLootTable(lootTable) == null) {
+        if (generationService.resolveLootTable(lootTable).isEmpty()) {
             sender.sendMessage(Component.text("Unknown loot table: " + lootTable, NamedTextColor.RED));
             return 0;
         }
@@ -131,12 +148,16 @@ public final class PoiLootCommand {
             return 0;
         }
 
-        return registrar.inspect(player).map(inspection -> {
-            sender.sendMessage(Component.text("Registered: " + (inspection.registered() ? "Yes" : "No")));
-            sender.sendMessage(Component.text("Id: " + valueOrDash(inspection.id())));
-            sender.sendMessage(Component.text("Type: " + inspection.type()));
-            sender.sendMessage(Component.text("Loot table: " + valueOrDash(inspection.lootTable())));
-            sender.sendMessage(Component.text("Location: " + inspection.location()));
+        return lookupService.inspectTarget(player, TARGET_DISTANCE).map(inspection -> {
+            sender.sendMessage(Component.text("Registered: " + (inspection.lootPoint().isPresent() ? "Yes" : "No")));
+            sender.sendMessage(Component.text("Id: " + valueOrDash(
+                    inspection.lootPoint().map(LootPoint::id).map(Object::toString).orElse(null)
+            )));
+            sender.sendMessage(Component.text("Type: " + inspection.displayType()));
+            sender.sendMessage(Component.text("Loot table: " + valueOrDash(
+                    inspection.lootPoint().map(LootPoint::lootTable).map(NamespacedKey::asString).orElse(null)
+            )));
+            sender.sendMessage(Component.text("Location: " + formatLocation(inspection)));
             return Command.SINGLE_SUCCESS;
         }).orElseGet(() -> {
             sender.sendMessage(SUPPORTED_CONTAINER_HELP);
@@ -163,5 +184,11 @@ public final class PoiLootCommand {
 
     private static String valueOrDash(String value) {
         return value == null ? "-" : value;
+    }
+
+    private static String formatLocation(LootPointInspection inspection) {
+        var location = inspection.location();
+        return location.getWorld().getName() + " (" + location.getBlockX() + ", "
+                + location.getBlockY() + ", " + location.getBlockZ() + ")";
     }
 }
