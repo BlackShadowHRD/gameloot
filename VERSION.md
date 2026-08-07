@@ -17,7 +17,7 @@ Implemented:
 - Loot-point inspection
 - Loot-point deregistration
 - `gameloot.admin` permission checks and permission-aware suggestions
-- Registered loot-table key completion
+- Loaded vanilla and datapack loot-table key completion
 - Private 27-slot loot generation for registered containers
 - Physical-container access prevention for registered loot points
 - Persistent per-player claims keyed by player and loot-point UUID

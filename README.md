@@ -36,9 +36,8 @@ example:
 /gameloot register gameloot:mining_camp/common
 ```
 
-Brigadier completion suggests built-in loot-table keys. Datapack-defined keys
-are validated by the server when entered but currently need to be typed
-manually.
+Brigadier completion suggests the loot-table keys currently loaded in the
+server registry, including available vanilla and datapack-defined tables.
 
 ## Loot-point data
 

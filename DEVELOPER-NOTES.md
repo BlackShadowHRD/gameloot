@@ -405,7 +405,9 @@ Treat these rules as architectural constraints:
 - duplicate loot-point IDs;
 - claim insertion and duplicate prevention;
 - cascading claim deletion;
-- restoration of a deleted loot point and its claims.
+- restoration of a deleted loot point and its claims;
+- migration from the former database file path;
+- migration of stored `poiloot:` loot-table keys to `gameloot:`.
 
 The tests use temporary SQLite databases and the test-only Xerial driver.
 There are currently no automated Paper event, command, PDC, or inventory tests;

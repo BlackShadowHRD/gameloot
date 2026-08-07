@@ -17,16 +17,14 @@ All notable changes to GameLoot are documented in this file.
 - `/gameloot deregister` for removing GameLoot metadata from a targeted
   container.
 - `gameloot.admin` permission, granted to server operators by default.
-- Brigadier completion for built-in loot-table keys.
-- Persistent loot-point UUID and loot-table metadata using
-  `PersistentDataContainer`.
+- Brigadier completion for loaded vanilla and datapack loot-table keys.
+- Persistent loot-point UUID markers using `PersistentDataContainer`.
 - Duplicate-registration detection and player-facing Adventure messages.
 - Private loot generation using Paper loot tables and `LootContext`.
 - Private 27-slot inventories for registered block containers and chest
   minecarts.
 - Interaction handling that prevents access to a registered physical
   container.
-- In-memory per-player claim tracking keyed by player and loot-point UUID.
 - Stable loot sessions that preserve remaining items until the first item is
   taken and the inventory is closed.
 - Custom inventory holders and guarded click/drag handling for private loot
@@ -37,7 +35,8 @@ All notable changes to GameLoot are documented in this file.
 - Persistent per-player claims with an in-memory cache for synchronous gameplay
   checks.
 - Repository integration tests covering schema creation, registration CRUD,
-  duplicate handling, claims, cascading deletion, and compensation restoration.
+  duplicate handling, claims, cascading deletion, compensation restoration,
+  database-file migration, and loot-table namespace migration.
 
 ### Changed
 
