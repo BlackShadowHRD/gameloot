@@ -1,0 +1,244 @@
+package io.github.blackshadowhrd.gameloot.command;
+
+import com.mojang.brigadier.Command;
+import com.mojang.brigadier.builder.LiteralArgumentBuilder;
+import com.mojang.brigadier.context.CommandContext;
+import com.mojang.brigadier.suggestion.Suggestions;
+import com.mojang.brigadier.suggestion.SuggestionsBuilder;
+import com.mojang.brigadier.tree.LiteralCommandNode;
+import io.github.blackshadowhrd.gameloot.model.LootPoint;
+import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
+import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
+import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
+import io.github.blackshadowhrd.gameloot.target.LootPointInspection;
+import io.papermc.paper.command.brigadier.CommandSourceStack;
+import io.papermc.paper.command.brigadier.Commands;
+import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
+import net.kyori.adventure.text.Component;
+import net.kyori.adventure.text.format.NamedTextColor;
+import org.bukkit.NamespacedKey;
+import org.bukkit.Registry;
+import org.bukkit.command.CommandSender;
+import org.bukkit.entity.Player;
+import org.bukkit.plugin.Plugin;
+
+import java.util.Locale;
+import java.util.concurrent.CompletableFuture;
+
+public final class GameLootCommand {
+
+    public static final String DESCRIPTION = "Manages GameLoot loot points";
+
+    private static final String ADMIN_PERMISSION = "gameloot.admin";
+    private static final String LOOT_TABLE_ARGUMENT = "loot-table";
+    private static final double TARGET_DISTANCE = 6;
+    private static final Component SUPPORTED_CONTAINER_HELP =
+            Component.text("Look at a supported container within 6 blocks.");
+
+    private final Plugin plugin;
+    private final LootPointRegistrar registrar;
+    private final LootPointLookupService lookupService;
+    private final LootGenerationService generationService;
+
+    public GameLootCommand(
+            Plugin plugin,
+            LootPointRegistrar registrar,
+            LootPointLookupService lookupService,
+            LootGenerationService generationService
+    ) {
+        this.plugin = plugin;
+        this.registrar = registrar;
+        this.lookupService = lookupService;
+        this.generationService = generationService;
+    }
+
+    public LiteralCommandNode<CommandSourceStack> createCommand() {
+        LiteralArgumentBuilder<CommandSourceStack> root = Commands.literal("gameloot")
+                .executes(this::help)
+                .then(Commands.literal("version")
+                        .executes(this::version))
+                .then(Commands.literal("register")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .then(Commands.argument(LOOT_TABLE_ARGUMENT, ArgumentTypes.namespacedKey())
+                                .suggests(this::suggestLootTables)
+                                .executes(this::register)))
+                .then(Commands.literal("deregister")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .executes(this::deregister))
+                .then(Commands.literal("inspect")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .executes(this::inspect));
+
+        return root.build();
+    }
+
+    private int help(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+
+        sender.sendMessage(Component.text("GameLoot commands:"));
+        sender.sendMessage(Component.text("/gameloot version"));
+
+        if (sender.hasPermission(ADMIN_PERMISSION)) {
+            sender.sendMessage(Component.text("/gameloot register <loot-table>"));
+            sender.sendMessage(Component.text("/gameloot deregister"));
+            sender.sendMessage(Component.text("/gameloot inspect"));
+        }
+
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int version(CommandContext<CommandSourceStack> context) {
+        context.getSource().getSender().sendMessage(Component.text(
+                plugin.getPluginMeta().getName() + " " + plugin.getPluginMeta().getVersion()
+        ));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int register(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can register loot points.", NamedTextColor.RED));
+            return 0;
+        }
+
+        NamespacedKey lootTable = context.getArgument(LOOT_TABLE_ARGUMENT, NamespacedKey.class);
+
+        if (generationService.resolveLootTable(lootTable).isEmpty()) {
+            sender.sendMessage(Component.text("Unknown loot table: " + lootTable, NamedTextColor.RED));
+            return 0;
+        }
+        registrar.register(player, lootTable).whenComplete((result, exception) ->
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to register this loot point.", NamedTextColor.RED));
+                        return;
+                    }
+                    sendRegistrationResult(sender, lootTable, result);
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendRegistrationResult(
+            CommandSender sender,
+            NamespacedKey lootTable,
+            LootPointRegistrar.Result result
+    ) {
+        switch (result) {
+            case REGISTERED -> {
+                sender.sendMessage(Component.text("Loot point registered with " + lootTable, NamedTextColor.GREEN));
+            }
+            case ALREADY_REGISTERED ->
+                    sender.sendMessage(Component.text("That container is already a loot point.", NamedTextColor.YELLOW));
+            case INVALID_TARGET -> sender.sendMessage(SUPPORTED_CONTAINER_HELP);
+            case PERSISTENCE_FAILURE ->
+                    sender.sendMessage(Component.text("Unable to persist this loot point.", NamedTextColor.RED));
+        }
+    }
+
+    private int deregister(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can deregister loot points."));
+            return 0;
+        }
+
+        registrar.deregister(player).whenComplete((result, exception) ->
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to deregister this loot point.", NamedTextColor.RED));
+                        return;
+                    }
+                    sendDeregistrationResult(sender, result);
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendDeregistrationResult(CommandSender sender, LootPointRegistrar.DeregisterResult result) {
+        switch (result) {
+            case DEREGISTERED -> {
+                sender.sendMessage(Component.text("Loot point deregistered."));
+            }
+            case NOT_REGISTERED ->
+                    sender.sendMessage(Component.text("That container is not a registered loot point."));
+            case INVALID_TARGET -> sender.sendMessage(SUPPORTED_CONTAINER_HELP);
+            case MISSING_DATABASE_RECORD -> sender.sendMessage(Component.text(
+                    "Loot point data is missing from the database. Check the server log.",
+                    NamedTextColor.RED
+            ));
+            case PERSISTENCE_FAILURE ->
+                    sender.sendMessage(Component.text("Unable to persist deregistration.", NamedTextColor.RED));
+        }
+    }
+
+    private int inspect(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can inspect loot points."));
+            return 0;
+        }
+
+        lookupService.inspectTarget(player, TARGET_DISTANCE).whenComplete((inspection, exception) ->
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text(
+                                "Unable to inspect this loot point.",
+                                NamedTextColor.RED
+                        ));
+                        return;
+                    }
+                    inspection.ifPresentOrElse(
+                            value -> sendInspection(sender, value),
+                            () -> sender.sendMessage(SUPPORTED_CONTAINER_HELP)
+                    );
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendInspection(CommandSender sender, LootPointInspection inspection) {
+            sender.sendMessage(Component.text("Registered: " + (inspection.lootPoint().isPresent() ? "Yes" : "No")));
+            sender.sendMessage(Component.text("Id: " + valueOrDash(
+                    inspection.lootPoint().map(LootPoint::id).map(Object::toString).orElse(null)
+            )));
+            sender.sendMessage(Component.text("Type: " + inspection.displayType()));
+            sender.sendMessage(Component.text("Loot table: " + valueOrDash(
+                    inspection.lootPoint().map(LootPoint::lootTable).map(NamespacedKey::asString).orElse(null)
+            )));
+            sender.sendMessage(Component.text("Location: " + formatLocation(inspection)));
+            if (inspection.markerPresent() && inspection.lootPoint().isEmpty()) {
+                sender.sendMessage(Component.text(
+                        "Diagnostic: the PDC marker has no matching database record. Check the server log.",
+                        NamedTextColor.RED
+                ));
+            }
+    }
+
+    private CompletableFuture<Suggestions> suggestLootTables(
+            CommandContext<CommandSourceStack> context,
+            SuggestionsBuilder builder
+    ) {
+        String prefix = builder.getRemainingLowerCase();
+        Registry.LOOT_TABLES.keyStream()
+                .map(NamespacedKey::asString)
+                .filter(key -> key.toLowerCase(Locale.ROOT).startsWith(prefix))
+                .sorted()
+                .forEach(builder::suggest);
+        return builder.buildFuture();
+    }
+
+    private static boolean hasAdminPermission(CommandSourceStack source) {
+        return source.getSender().hasPermission(ADMIN_PERMISSION);
+    }
+
+    private static String valueOrDash(String value) {
+        return value == null ? "-" : value;
+    }
+
+    private static String formatLocation(LootPointInspection inspection) {
+        var location = inspection.location();
+        return location.getWorld().getName() + " (" + location.getBlockX() + ", "
+                + location.getBlockY() + ", " + location.getBlockZ() + ")";
+    }
+}

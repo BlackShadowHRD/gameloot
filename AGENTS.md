@@ -1,8 +1,8 @@
-# POILoot development instructions
+# GameLoot development instructions
 
 ## Project
 
-POILoot is a Java plugin for Paper Minecraft 26.2.
+GameLoot is a Java plugin for Paper Minecraft 26.2.
 
 The plugin will provide per-player, one-time loot at registered POIs,
 including chests, barrels, chest minecarts and shelves.

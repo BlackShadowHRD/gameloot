@@ -1,12 +1,12 @@
-# POILoot Developer Notes
+# GameLoot Developer Notes
 
 This document is a technical handover for developers continuing work on
-POILoot. It describes the architecture and behaviour of the
+GameLoot. It describes the architecture and behaviour of the
 `0.1.0-SNAPSHOT` development version.
 
 ## Project overview
 
-POILoot is a Paper 26.2 plugin that turns supported Minecraft containers into
+GameLoot is a Paper 26.2 plugin that turns supported Minecraft containers into
 loot points. Each player can receive a private, one-time loot roll from each
 registered point. The physical container is never used to hold or present the
 generated loot.
@@ -56,10 +56,10 @@ Paper server.
 ## Source layout
 
 ```text
-io.github.blackshadowhrd.poiloot
-├── PoiLootPlugin.java
+io.github.blackshadowhrd.gameloot
+├── GameLootPlugin.java
 ├── command
-│   └── PoiLootCommand.java
+│   └── GameLootCommand.java
 ├── database
 │   ├── DatabaseException.java
 │   └── DatabaseManager.java
@@ -96,13 +96,13 @@ io.github.blackshadowhrd.poiloot
 ```
 
 Repository integration tests are in
-`src/test/java/io/github/blackshadowhrd/poiloot/repository`.
+`src/test/java/io/github/blackshadowhrd/gameloot/repository`.
 
 ## Architecture and responsibilities
 
 ### Plugin lifecycle
 
-`PoiLootPlugin` is the composition root. It creates the database manager,
+`GameLootPlugin` is the composition root. It creates the database manager,
 repositories, services, command tree, and listeners using constructor
 injection. It deliberately contains no gameplay or SQL logic.
 
@@ -142,7 +142,7 @@ differences from the registrar.
 
 `DatabaseManager` owns:
 
-- the JDBC URL for `plugins/POILoot/poiloot.db`;
+- the JDBC URL for `plugins/GameLoot/gameloot.db`;
 - SQLite driver loading;
 - connection configuration;
 - schema creation and migration;
@@ -210,7 +210,7 @@ generate loot, track claims, or manage sessions.
 generated once and preserves its remaining inventory when reopened before the
 first item is taken. Sessions are intentionally not persisted.
 
-`PrivateLootInventoryHolder` provides a robust identity for POILoot inventory
+`PrivateLootInventoryHolder` provides a robust identity for GameLoot inventory
 views. Never identify private inventories only by their title.
 
 ### Listeners
@@ -235,14 +235,13 @@ rerollable.
 
 ### Commands
 
-`PoiLootCommand` builds this Brigadier tree:
+`GameLootCommand` builds this Brigadier tree:
 
 ```text
-/poiloot
+/gameloot
 ├── version
 ├── register <loot-table>
 ├── deregister
-├── de-register
 └── inspect
 ```
 
@@ -250,7 +249,7 @@ The tree uses `Commands.literal(...)`, `Commands.argument(...)`,
 `ArgumentTypes.namespacedKey()`, and `CommandSourceStack`.
 
 `version` and root help are available to all senders. Management branches
-require `poiloot.admin`; the Brigadier `requires` predicates also hide those
+require `gameloot.admin`; the Brigadier `requires` predicates also hide those
 branches from unauthorised suggestions. Player-only operations reject console
 and other non-player senders with Adventure messages.
 
@@ -260,7 +259,7 @@ thread after asynchronous operations.
 
 ## Persistent data model
 
-### SQLite schema version 1
+### SQLite schema version 2
 
 ```sql
 CREATE TABLE schema_version (
@@ -304,7 +303,7 @@ them.
 New registrations store only:
 
 ```text
-poiloot:loot_point_id -> canonical UUID string
+gameloot:loot_point_id -> canonical UUID string
 ```
 
 The UUID is the identity link; location alone is not identity. The database is
@@ -313,6 +312,7 @@ authoritative for the loot-table key and target metadata.
 Older development targets may also contain:
 
 ```text
+poiloot:loot_point_id -> canonical UUID string
 poiloot:loot_table -> namespaced loot-table key
 ```
 
@@ -321,12 +321,21 @@ SQLite, `LootPointLookupService` inserts the legacy record. It removes the old
 loot-table PDC value only after successful insertion. Conflicts between a
 physical target and an existing database record are logged and refused.
 
+The rename migration also:
+
+- moves `plugins/POILoot/poiloot.db` to `plugins/GameLoot/gameloot.db` if the
+  destination does not exist;
+- migrates stored `poiloot:` loot-table keys to `gameloot:` in schema version
+  2;
+- recognizes old `poiloot:*` PDC keys and replaces them with the UUID-only
+  `gameloot:loot_point_id` marker after successful resolution.
+
 ## Operational flows
 
 ### Registration
 
 1. Locate and validate the target on the main thread.
-2. Reject any existing POILoot UUID marker.
+2. Reject any existing GameLoot UUID marker.
 3. Generate a UUID and capture physical metadata.
 4. Insert the `loot_points` row on the database executor.
 5. Return to the main thread and write the UUID marker.
@@ -421,13 +430,13 @@ harness.
 
 Likely future repositories should follow the existing repository/service
 split. Add SQL to a repository, expose cached or gameplay-oriented behaviour
-through a service, construct both in `PoiLootPlugin`, and keep listeners and
+through a service, construct both in `GameLootPlugin`, and keep listeners and
 commands unaware of JDBC.
 
 ## Manual regression checklist
 
-- Start with no plugin data directory and verify `poiloot.db` and schema
-  version 1 are created.
+- Start with no plugin data directory and verify `gameloot.db` and schema
+  version 2 are created.
 - Register and inspect a chest, barrel, copper container, and chest minecart.
 - Restart and verify registrations remain valid.
 - Verify new targets contain the UUID PDC key but no loot-table PDC key.
@@ -439,13 +448,13 @@ commands unaware of JDBC.
   contents before restart.
 - Fill a player inventory and verify items are not silently discarded.
 - Deregister a point and verify its database claims are cascade-deleted.
-- Check `/poiloot`, `version`, `register`, `deregister`, `de-register`, and
-  `inspect`, including console rejection and permission-aware suggestions.
+- Check `/gameloot`, `version`, `register`, `deregister`, and `inspect`,
+  including console rejection and permission-aware suggestions.
 - Stop the server while persistence work is pending and inspect shutdown logs.
 
 ## Development conventions
 
-- Keep `PoiLootPlugin` small and use constructor injection.
+- Keep `GameLootPlugin` small and use constructor injection.
 - Use Adventure Components for player-visible messages.
 - Preserve UUID-based identity and existing PDC key names.
 - Keep Paper-specific objects at service, listener, inventory, and target

@@ -1,22 +1,22 @@
 # Changelog
 
-All notable changes to POILoot are documented in this file.
+All notable changes to GameLoot are documented in this file.
 
 ## 0.1.0-SNAPSHOT
 
 ### Added
 
-- Native Paper Brigadier `/poiloot` command tree registered through the plugin
+- Native Paper Brigadier `/gameloot` command tree registered through the plugin
   lifecycle API.
-- Permission-aware `/poiloot` help output.
-- `/poiloot version` for plugin name and version reporting.
-- `/poiloot register <loot-table>` for registering targeted chests, barrels,
+- Permission-aware `/gameloot` help output.
+- `/gameloot version` for plugin name and version reporting.
+- `/gameloot register <loot-table>` for registering targeted chests, barrels,
   and chest minecarts.
-- `/poiloot inspect` for displaying registration status, ID, container type,
+- `/gameloot inspect` for displaying registration status, ID, container type,
   loot table, and location.
-- `/poiloot deregister` for removing POILoot metadata from a targeted
+- `/gameloot deregister` for removing GameLoot metadata from a targeted
   container.
-- `poiloot.admin` permission, granted to server operators by default.
+- `gameloot.admin` permission, granted to server operators by default.
 - Brigadier completion for built-in loot-table keys.
 - Persistent loot-point UUID and loot-table metadata using
   `PersistentDataContainer`.
@@ -41,8 +41,15 @@ All notable changes to POILoot are documented in this file.
 
 ### Changed
 
+- Renamed the plugin, Java package hierarchy, main class, default command,
+  permission, database file, and datapack namespace from POILoot to GameLoot.
+- Removed the deprecated `/poiloot` root alias; `/gameloot` is now the only
+  command root.
+- Removed the unused legacy `de-register` subcommand; use `deregister`.
+- Added compatibility migration for the former database location, stored
+  `poiloot:` loot-table keys, and old PDC namespace.
 - Admin-only Brigadier branches are hidden from senders without
-  `poiloot.admin`.
+  `gameloot.admin`.
 - Invalid-target guidance now uses the concise message: `Look at a supported
   container within 6 blocks.`
 - Loot-point metadata is now authoritative in SQLite; targets retain only their

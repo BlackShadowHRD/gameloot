@@ -1,1 +1,1 @@
-rootProject.name = "POILoot"
+rootProject.name = "GameLoot"

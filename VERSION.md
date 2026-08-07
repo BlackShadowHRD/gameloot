@@ -6,16 +6,17 @@ Current development version. This is not a stable release.
 
 Implemented:
 
-- Native Paper Brigadier `/poiloot` command tree
+- Native Paper Brigadier `/gameloot` command tree
 - Plugin name and version reporting
 - Registration of chests, barrels, and chest minecarts as loot points
 - SQLite-backed authoritative loot-point metadata
 - UUID-only PDC links between physical targets and database records
 - Automatic migration of legacy UUID and loot-table PDC registrations
+- Automatic database-file and `poiloot:` namespace migration
 - Duplicate-registration detection
 - Loot-point inspection
 - Loot-point deregistration
-- `poiloot.admin` permission checks and permission-aware suggestions
+- `gameloot.admin` permission checks and permission-aware suggestions
 - Registered loot-table key completion
 - Private 27-slot loot generation for registered containers
 - Physical-container access prevention for registered loot points

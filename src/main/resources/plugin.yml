@@ -1,16 +1,16 @@
-name: POILoot
+name: GameLoot
 description: '${description}'
 version: '${version}'
 
-main: io.github.blackshadowhrd.poiloot.PoiLootPlugin
+main: io.github.blackshadowhrd.gameloot.GameLootPlugin
 api-version: '26.2'
 load: POSTWORLD
 
 authors:
   - DocBoti
-website: https://github.com/BlackShadowHRD/poiloot
+website: https://github.com/BlackShadowHRD/gameloot
 
 permissions:
-  poiloot.admin:
-    description: Allows management and inspection of POILoot loot points
+  gameloot.admin:
+    description: Allows management and inspection of GameLoot loot points
     default: op
