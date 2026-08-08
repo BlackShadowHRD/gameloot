@@ -64,6 +64,7 @@ io.github.blackshadowhrd.gameloot
 │   └── PrivateLootInventoryHolder.java
 ├── listener
 │   ├── LootPointInteractionListener.java
+│   ├── LootPointProtectionListener.java
 │   └── PrivateLootInventoryListener.java
 ├── model
 │   ├── LootPoint.java
@@ -82,6 +83,8 @@ io.github.blackshadowhrd.gameloot
 │   ├── LootPointLookupService.java
 │   ├── LootPointTargetResolver.java
 │   ├── LootPointPersistenceService.java
+│   ├── LootPointProtectionPolicy.java
+│   ├── LootPointProtectionService.java
 │   ├── LootPointRegistrar.java
 │   ├── LootSessionService.java
 │   ├── MutableLootPointTarget.java
@@ -234,6 +237,33 @@ inventory.
 insertion and handles loot removal. It rejects placing, dragging,
 shift-clicking, collection, and hotbar-style manipulation that could introduce
 player-owned items into the top inventory.
+
+`LootPointProtectionService` is the central boundary for deciding whether a
+supported physical block, entity, or inventory is registered and protected.
+It delegates supported-type and PDC-marker handling to the existing lookup and
+resolver services. Inventory-holder traversal, including double chests and
+storage minecarts, is kept here rather than repeated by listeners.
+
+`LootPointProtectionListener` protects registered blocks from breaking, the
+affected-block lists of entity and block explosions, piston movement, fire,
+entity-driven block changes, copper block-form changes, and hopper or
+hopper-minecart inventory transfers. It
+also protects registered chest minecarts from damage, destruction, collisions,
+portal travel, and rail/physics movement. The interaction listener uses the
+same protection service for direct access and double-chest access.
+
+Physical protection does not inspect game mode, operator status, or command
+permissions, so Survival, Adventure, and Creative players receive identical
+protection enforcement. The interaction listener deliberately passes Spectator
+interactions through to vanilla and does not open or claim GameLoot rewards.
+Creative pick-block remains untouched because it does not mutate the world
+target.
+
+High-frequency protection checks read only the live PDC marker after the
+authoritative resolver accepts the target type. They do not submit database
+work. A supported object with a GameLoot marker is protected fail-closed even
+when the marker or database record is inconsistent; normal interaction and
+inspection resolution provide the detailed diagnostic.
 
 The first valid loot transfer is held until the asynchronous claim insert
 succeeds. Once persistence completes, the transfer is performed on the main
@@ -418,7 +448,8 @@ Different player UUIDs have independent claims for the same loot-point UUID.
    `ItemStack.serializeAsBytes()`.
 3. Insert the point and reward rows in one transaction, then write the PDC
    marker through the normal compensated registration flow.
-4. Cancel registered-shelf interaction and plan a complete resulting player
+4. Cancel registered-shelf interaction through the central protection service
+   and plan a complete resulting player
    storage array without changing live inventory state.
 5. Persist the UUID claim atomically, re-plan on the main thread, and replace
    storage contents once. If capacity changed, delete the claim and transfer
@@ -494,11 +525,12 @@ harness.
 - Active unclaimed inventory sessions exist only in memory. A restart discards
   them and permits a fresh generation for an unclaimed point.
 - Generated inventory contents are not stored in SQLite.
-- There is no shelf implementation despite the reserved enum value.
-- There is no claim reset or administration command.
-- There is no protection against hoppers, explosions, or other external world
-  mechanics beyond cancelling player access to registered physical
-  containers.
+- GameLoot does not automatically validate or remove database rows whose
+  physical target was removed by an external administration tool. A future
+  validation/cleanup command should report these orphaned registrations.
+- Explicit plugin or administrator mutations that do not raise cancellable
+  Bukkit gameplay events can bypass protection. WorldEdit integration is not
+  included.
 - There are no player statistics, achievements, discoveries, or objective
   progress repositories yet.
 - The database uses one short-lived connection per operation rather than a
@@ -534,6 +566,20 @@ commands unaware of JDBC.
 - Check `/gameloot`, `version`, `register`, `deregister`, `inspect`, `claims`,
   and `reset`, including console rejection and permission-aware suggestions.
 - Stop the server while persistence work is pending and inspect shutdown logs.
+- In Creative mode, try to break a registered standard block container and a
+  registered shelf; both must remain intact.
+- In Creative mode, attack, collide with, and attempt to move a registered
+  chest minecart; it must remain intact and stationary.
+- In Creative mode, try every shelf item insertion, removal, and hotbar-swap
+  interaction; the visible shelf contents must remain unchanged.
+- In Creative mode, attempt to insert and remove items from every registered
+  physical inventory using both direct access and automation.
+- Use Creative pick-block on registered blocks and verify the copied item is
+  obtained without changing the world target.
+- Repeat destructive attempts as an operator with `gameloot.admin` and verify
+  that neither status grants a protection bypass.
+- In Spectator mode, verify vanilla non-mutating interaction remains available
+  and no GameLoot private inventory or shelf reward is opened or claimed.
 
 ## Development conventions
 

@@ -3,6 +3,7 @@ package io.github.blackshadowhrd.gameloot;
 import io.github.blackshadowhrd.gameloot.command.GameLootCommand;
 import io.github.blackshadowhrd.gameloot.database.DatabaseManager;
 import io.github.blackshadowhrd.gameloot.listener.LootPointInteractionListener;
+import io.github.blackshadowhrd.gameloot.listener.LootPointProtectionListener;
 import io.github.blackshadowhrd.gameloot.listener.PrivateLootInventoryListener;
 import io.github.blackshadowhrd.gameloot.repository.ClaimRepository;
 import io.github.blackshadowhrd.gameloot.repository.LootPointRepository;
@@ -11,6 +12,7 @@ import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootPointPersistenceService;
+import io.github.blackshadowhrd.gameloot.service.LootPointProtectionService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
 import io.github.blackshadowhrd.gameloot.service.LootSessionService;
 import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
@@ -60,6 +62,7 @@ public final class GameLootPlugin extends JavaPlugin {
 
         LootPointTargetResolver targetResolver = new LootPointTargetResolver();
         LootPointLookupService lookupService = new LootPointLookupService(this, persistenceService, targetResolver);
+        LootPointProtectionService protectionService = new LootPointProtectionService(lookupService);
         LootPointRegistrar registrar = new LootPointRegistrar(
                 this,
                 lookupService,
@@ -87,13 +90,17 @@ public final class GameLootPlugin extends JavaPlugin {
         getServer().getPluginManager().registerEvents(
                 new LootPointInteractionListener(
                         this,
-                        lookupService,
+                        protectionService,
                         generationService,
                         inventoryService,
                         claimService,
                         sessionService,
                         shelfRewardService
                 ),
+                this
+        );
+        getServer().getPluginManager().registerEvents(
+                new LootPointProtectionListener(protectionService),
                 this
         );
         getServer().getPluginManager().registerEvents(

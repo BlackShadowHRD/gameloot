@@ -109,6 +109,30 @@ display. The transfer is all-or-nothing: if every item cannot fit, nothing is
 transferred or claimed. Deregistration removes the template and claims, leaves
 the physical items in place, and restores vanilla shelf interaction.
 
+## Registered-target protection
+
+Every registered GameLoot target is protected map infrastructure. Players
+cannot break it, normal explosions leave it out of their affected block list,
+pistons cannot move it, fire and copper weathering cannot alter it, and hopper
+automation cannot insert or extract items. Registered chest minecarts are also
+immobilized and protected from damage, collisions, portals, destruction, and
+inventory automation. These checks use the target's PDC marker synchronously;
+they do not query SQLite during gameplay events.
+
+Use `/gameloot deregister` before intentionally removing or changing a target.
+Operators do not receive an implicit protection bypass. Explicit external
+administration tools such as WorldEdit may bypass normal Bukkit gameplay
+events and therefore may bypass GameLoot protection.
+
+Protection applies equally in Survival, Adventure, and Creative mode, including
+to operators and players with `gameloot.admin`. Spectators retain normal
+non-mutating vanilla interaction and cannot open or claim GameLoot rewards.
+Harmless Creative pick-block actions remain unaffected.
+
+If a physical target disappears despite these protections, GameLoot retains
+its database registration and claims. It does not silently clean up persistent
+data; future validation tooling can report and repair orphaned registrations.
+
 ## Claim administration
 
 `/gameloot claims` reports the targeted loot point's UUID, loot-table key,

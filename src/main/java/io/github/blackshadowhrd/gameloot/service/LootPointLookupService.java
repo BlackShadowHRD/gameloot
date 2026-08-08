@@ -54,6 +54,14 @@ public final class LootPointLookupService {
                 .orElseGet(() -> unmarkedResolution());
     }
 
+    public boolean hasRegistrationMarker(Block block) {
+        return supportedBlock(block).map(this::hasMarker).orElse(false);
+    }
+
+    public boolean hasRegistrationMarker(Entity entity) {
+        return supportedEntity(entity).map(this::hasMarker).orElse(false);
+    }
+
     public CompletableFuture<Optional<LootPointInspection>> inspectTarget(Player player, double maxDistance) {
         Optional<MutableLootPointTarget> supportedTarget = findSupportedTarget(player, maxDistance);
         if (supportedTarget.isEmpty()) {

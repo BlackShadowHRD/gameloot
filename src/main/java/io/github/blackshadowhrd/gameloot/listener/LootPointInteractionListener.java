@@ -1,13 +1,14 @@
 package io.github.blackshadowhrd.gameloot.listener;
 
 import io.github.blackshadowhrd.gameloot.model.LootPoint;
+import io.github.blackshadowhrd.gameloot.model.LootPointType;
 import io.github.blackshadowhrd.gameloot.service.ClaimService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
-import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
+import io.github.blackshadowhrd.gameloot.service.LootPointProtectionPolicy;
+import io.github.blackshadowhrd.gameloot.service.LootPointProtectionService;
 import io.github.blackshadowhrd.gameloot.service.LootSessionService;
 import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
-import io.github.blackshadowhrd.gameloot.model.LootPointType;
 import io.github.blackshadowhrd.gameloot.target.LootPointTarget;
 import io.github.blackshadowhrd.gameloot.target.LootPointResolution;
 import net.kyori.adventure.text.Component;
@@ -31,7 +32,7 @@ import java.util.logging.Logger;
 
 public final class LootPointInteractionListener implements Listener {
 
-    private final LootPointLookupService lookupService;
+    private final LootPointProtectionService protectionService;
     private final LootGenerationService generationService;
     private final PrivateInventoryService inventoryService;
     private final ClaimService claimService;
@@ -42,7 +43,7 @@ public final class LootPointInteractionListener implements Listener {
 
     public LootPointInteractionListener(
             Plugin plugin,
-            LootPointLookupService lookupService,
+            LootPointProtectionService protectionService,
             LootGenerationService generationService,
             PrivateInventoryService inventoryService,
             ClaimService claimService,
@@ -50,7 +51,7 @@ public final class LootPointInteractionListener implements Listener {
             ShelfRewardService shelfRewardService
     ) {
         this.plugin = plugin;
-        this.lookupService = lookupService;
+        this.protectionService = protectionService;
         this.generationService = generationService;
         this.inventoryService = inventoryService;
         this.claimService = claimService;
@@ -64,11 +65,15 @@ public final class LootPointInteractionListener implements Listener {
         if (event.getHand() != EquipmentSlot.HAND || event.getAction() != Action.RIGHT_CLICK_BLOCK) {
             return;
         }
+        if (!LootPointProtectionPolicy.handlesLootInteraction(event.getPlayer().getGameMode())) return;
 
-        LootPointResolution resolution = lookupService.resolveTarget(event.getClickedBlock());
+        LootPointResolution resolution = protectionService.resolve(event.getClickedBlock());
         if (resolution.marked()) {
             event.setCancelled(true);
             openResolvedTarget(event.getPlayer(), resolution);
+        } else if (protectionService.isProtectedAccess(event.getClickedBlock())) {
+            // The other half of a double chest may carry the marker.
+            event.setCancelled(true);
         }
     }
 
@@ -77,8 +82,9 @@ public final class LootPointInteractionListener implements Listener {
         if (event.getHand() != EquipmentSlot.HAND) {
             return;
         }
+        if (!LootPointProtectionPolicy.handlesLootInteraction(event.getPlayer().getGameMode())) return;
 
-        LootPointResolution resolution = lookupService.resolveTarget(event.getRightClicked());
+        LootPointResolution resolution = protectionService.resolve(event.getRightClicked());
         if (resolution.marked()) {
             event.setCancelled(true);
             openResolvedTarget(event.getPlayer(), resolution);
