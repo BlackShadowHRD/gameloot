@@ -545,7 +545,7 @@ commands unaware of JDBC.
 ## Manual regression checklist
 
 - Start with no plugin data directory and verify `gameloot.db` and schema
-  version 2 are created.
+  version 3 are created.
 - Register and inspect a chest, barrel, copper container, and chest minecart.
 - Restart and verify registrations remain valid.
 - Verify new targets contain the UUID PDC key but no loot-table PDC key.

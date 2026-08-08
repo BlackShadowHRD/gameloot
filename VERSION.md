@@ -36,8 +36,24 @@ Implemented:
   minecart, and shelf target support
 - Fixed shelf reward capture and direct all-or-nothing claiming
 - Persistent Paper-serialized shelf templates
+- Central registered-target protection using authoritative target resolution
+  and synchronous PDC-marker checks
+- Protection from player breaking, explosions, pistons, fire, block-state
+  changes, and hopper or hopper-minecart automation
+- Registered chest-minecart damage, destruction, collision, portal, movement,
+  and inventory protection
+- Survival, Adventure, and Creative protection without operator or
+  `gameloot.admin` bypasses
+- Vanilla non-mutating Spectator behaviour without GameLoot reward access
+- Harmless Creative pick-block support
+- Protection policy tests for movement, inventory transfer, and game-mode
+  decisions
 
 Not yet implemented:
 
 - Session recovery after a server restart
 - Persistent generated inventory contents for unclaimed sessions
+- Automatic validation or cleanup of registrations whose physical targets
+  were removed by external tools
+- Hard protection against direct world or entity mutations that bypass
+  cancellable Bukkit/Paper gameplay events

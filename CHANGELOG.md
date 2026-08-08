@@ -47,6 +47,15 @@ All notable changes to GameLoot are documented in this file.
   all-or-nothing per-player rewards.
 - Schema version 3 with nullable shelf loot tables and normalized
   `shelf_loot_items` storage.
+- Central protection services for registered block containers, shelves, and
+  chest minecarts.
+- Protection against block breaking, explosions, piston movement, fire,
+  entity-driven block changes, copper weathering, and container automation.
+- Chest-minecart protection against damage, destruction, collisions, portal
+  travel, inventory automation, and vanilla movement.
+- Game-mode policy coverage for Survival, Adventure, Creative, and Spectator.
+- Protection decision tests for piston movement, inventory transfers, and
+  loot interaction by game mode.
 
 ### Changed
 
@@ -70,6 +79,12 @@ All notable changes to GameLoot are documented in this file.
 - The first loot transfer waits for its claim to be durably persisted.
 - Existing UUID and loot-table PDC registrations migrate automatically when
   inspected or interacted with.
+- Physical target protection now applies equally to Survival, Adventure, and
+  Creative players, including operators and players with `gameloot.admin`.
+- Spectators retain vanilla non-mutating interaction and cannot open or claim
+  GameLoot rewards.
+- Creative pick-block remains available because it does not mutate the
+  registered world target.
 
 ### Fixed
 
@@ -78,6 +93,8 @@ All notable changes to GameLoot are documented in this file.
 - Deregistration compensates for PDC-removal failures by restoring the deleted
   loot-point record and its claims.
 - Inspection reports when a PDC UUID has no matching database record.
+- Access through the unmarked half of a double chest can no longer mutate a
+  registered adjoining chest inventory.
 
 ### Not yet implemented
 
