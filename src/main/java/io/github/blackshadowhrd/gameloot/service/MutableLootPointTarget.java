@@ -2,12 +2,13 @@ package io.github.blackshadowhrd.gameloot.service;
 
 import io.github.blackshadowhrd.gameloot.model.LootPoint;
 import io.github.blackshadowhrd.gameloot.model.LootPointType;
+import io.github.blackshadowhrd.gameloot.model.LootPointTargetType;
 import io.github.blackshadowhrd.gameloot.target.BlockLootPointTarget;
 import io.github.blackshadowhrd.gameloot.target.EntityLootPointTarget;
 import io.github.blackshadowhrd.gameloot.target.LootPointTarget;
 import org.bukkit.Location;
 import org.bukkit.block.Block;
-import org.bukkit.block.Container;
+import org.bukkit.block.TileState;
 import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.persistence.PersistentDataContainer;
 
@@ -15,7 +16,9 @@ sealed interface MutableLootPointTarget permits MutableBlockLootPointTarget, Mut
 
     PersistentDataContainer data();
 
-    LootPointType type();
+    LootPointTargetType targetType();
+
+    default LootPointType type() { return targetType().persistedType(); }
 
     String displayType();
 
@@ -28,7 +31,7 @@ sealed interface MutableLootPointTarget permits MutableBlockLootPointTarget, Mut
     boolean persist();
 }
 
-record MutableBlockLootPointTarget(Block block, Container state, String displayType)
+record MutableBlockLootPointTarget(Block block, TileState state, LootPointTargetType targetType)
         implements MutableLootPointTarget {
 
     @Override
@@ -37,8 +40,8 @@ record MutableBlockLootPointTarget(Block block, Container state, String displayT
     }
 
     @Override
-    public LootPointType type() {
-        return LootPointType.BLOCK_CONTAINER;
+    public String displayType() {
+        return targetType.displayName();
     }
 
     @Override
@@ -64,7 +67,8 @@ record MutableBlockLootPointTarget(Block block, Container state, String displayT
     }
 }
 
-record MutableEntityLootPointTarget(StorageMinecart entity) implements MutableLootPointTarget {
+record MutableEntityLootPointTarget(StorageMinecart entity, LootPointTargetType targetType)
+        implements MutableLootPointTarget {
 
     @Override
     public PersistentDataContainer data() {
@@ -72,13 +76,8 @@ record MutableEntityLootPointTarget(StorageMinecart entity) implements MutableLo
     }
 
     @Override
-    public LootPointType type() {
-        return LootPointType.CHEST_MINECART;
-    }
-
-    @Override
     public String displayType() {
-        return "Chest Minecart";
+        return targetType.displayName();
     }
 
     @Override

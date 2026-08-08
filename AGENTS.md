@@ -15,6 +15,10 @@ including chests, barrels, chest minecarts and shelves.
 - Use Adventure Components for player-facing messages.
 - Use UUIDs for player identity.
 - Use PersistentDataContainer for identifying loot points.
+- Keep supported target detection centralized in `LootPointTargetType` and
+  `LootPointTargetResolver`; do not accept arbitrary inventory holders.
+- Treat shelves as fixed serialized reward templates, not loot-table
+  containers or three independent claims.
 - Avoid NMS and reflection unless explicitly approved.
 - Keep the JavaPlugin entry class small.
 - Separate commands, listeners, storage and loot logic.

@@ -3,11 +3,10 @@
 GameLoot is a Java plugin for Paper Minecraft 26.2. It is being built to provide
 per-player, one-time loot at registered points of interest.
 
-The current development version can register block containers and chest
-minecarts as loot points, then generate a private inventory from the configured
-loot table when a player interacts with one. Loot-point metadata and per-player
-claims are stored in SQLite. Active inventory sessions remain in memory and
-reset when the server restarts.
+The current development version supports explicit loot-table containers and
+fixed-reward shelves. Loot-point metadata, shelf templates, and per-player
+claims are stored in SQLite. Active loot-table inventory sessions remain in
+memory and reset when the server restarts.
 
 ## Requirements
 
@@ -21,6 +20,7 @@ reset when the server restarts.
 | `/gameloot` | None | Shows the commands available to the sender. |
 | `/gameloot version` | None | Shows the plugin name and version. |
 | `/gameloot register <loot-table>` | `gameloot.admin` | Registers the targeted container with a namespaced loot-table key. |
+| `/gameloot register shelf` | `gameloot.admin` | Captures the targeted shelf as a fixed reward. |
 | `/gameloot deregister` | `gameloot.admin` | Removes GameLoot registration from the targeted container. |
 | `/gameloot inspect` | `gameloot.admin` | Shows the target's registration status, ID, type, loot table, and location. |
 | `/gameloot claims` | `gameloot.admin` | Shows claim information for the targeted loot point. |
@@ -48,6 +48,10 @@ single online or reliably known offline profile and perform persistence using
 its UUID rather than its current name.
 
 ## Loot-point data
+
+GameLoot supports only chests, trapped chests, barrels, every copper chest
+variant, every shulker box colour, chest minecarts, and shelves. Arbitrary
+inventory holders are deliberately unsupported.
 
 GameLoot stores authoritative registration metadata in:
 
@@ -92,6 +96,18 @@ claimable again; failures are logged and access is blocked safely.
 Unclaimed active sessions are deliberately not persisted. Restarting the
 server discards those temporary generated inventories, so reopening after a
 restart generates a new session.
+
+## Fixed shelf rewards
+
+Place up to three item stacks on a shelf, look at it within six blocks, and run
+`/gameloot register shelf`. Exact Paper-serialized copies of the visible stacks
+become the authoritative fixed template; empty shelves are rejected.
+
+Registered shelves are immutable through player interaction. Claiming copies
+the complete template directly into player storage without changing the
+display. The transfer is all-or-nothing: if every item cannot fit, nothing is
+transferred or claimed. Deregistration removes the template and claims, leaves
+the physical items in place, and restores vanilla shelf interaction.
 
 ## Claim administration
 

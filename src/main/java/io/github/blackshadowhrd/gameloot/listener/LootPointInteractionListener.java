@@ -6,6 +6,8 @@ import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootSessionService;
 import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
+import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
+import io.github.blackshadowhrd.gameloot.model.LootPointType;
 import io.github.blackshadowhrd.gameloot.target.LootPointTarget;
 import io.github.blackshadowhrd.gameloot.target.LootPointResolution;
 import net.kyori.adventure.text.Component;
@@ -36,6 +38,7 @@ public final class LootPointInteractionListener implements Listener {
     private final LootSessionService sessionService;
     private final Logger logger;
     private final Plugin plugin;
+    private final ShelfRewardService shelfRewardService;
 
     public LootPointInteractionListener(
             Plugin plugin,
@@ -43,7 +46,8 @@ public final class LootPointInteractionListener implements Listener {
             LootGenerationService generationService,
             PrivateInventoryService inventoryService,
             ClaimService claimService,
-            LootSessionService sessionService
+            LootSessionService sessionService,
+            ShelfRewardService shelfRewardService
     ) {
         this.plugin = plugin;
         this.lookupService = lookupService;
@@ -51,6 +55,7 @@ public final class LootPointInteractionListener implements Listener {
         this.inventoryService = inventoryService;
         this.claimService = claimService;
         this.sessionService = sessionService;
+        this.shelfRewardService = shelfRewardService;
         logger = plugin.getLogger();
     }
 
@@ -95,6 +100,10 @@ public final class LootPointInteractionListener implements Listener {
 
     private void openPrivateLoot(Player player, LootPointTarget target) {
         LootPoint lootPoint = target.lootPoint();
+        if (lootPoint.type() == LootPointType.SHELF) {
+            claimShelf(player, lootPoint);
+            return;
+        }
         if (claimService.isClaimed(player.getUniqueId(), lootPoint.id())) {
             player.sendMessage(Component.text("You have already claimed this loot point.", NamedTextColor.YELLOW));
             return;
@@ -126,6 +135,34 @@ public final class LootPointInteractionListener implements Listener {
                             + formatLocation(target.location()),
                     exception
             );
+        }
+    }
+
+    private void claimShelf(Player player, LootPoint lootPoint) {
+        try {
+            shelfRewardService.claim(player, lootPoint).whenComplete((result, exception) ->
+                    plugin.getServer().getScheduler().runTask(plugin, () -> {
+                        if (exception != null) {
+                            player.sendMessage(Component.text("Unable to claim this shelf reward.", NamedTextColor.RED));
+                            return;
+                        }
+                        switch (result) {
+                            case CLAIMED -> player.sendMessage(Component.text("Shelf reward claimed.", NamedTextColor.GREEN));
+                            case ALREADY_CLAIMED -> player.sendMessage(Component.text(
+                                    "You have already claimed this loot point.", NamedTextColor.YELLOW));
+                            case INSUFFICIENT_SPACE -> player.sendMessage(Component.text(
+                                    "Make enough inventory space for the complete shelf reward and try again.",
+                                    NamedTextColor.YELLOW));
+                            case MISSING_REWARD -> player.sendMessage(Component.text(
+                                    "This shelf reward is unavailable. Contact an administrator.", NamedTextColor.RED));
+                            case PERSISTENCE_FAILURE -> player.sendMessage(Component.text(
+                                    "Unable to save your shelf claim. No items were transferred.", NamedTextColor.RED));
+                        }
+                    }));
+        } catch (RuntimeException exception) {
+            logger.log(Level.SEVERE, "Failed to read shelf reward for loot point " + lootPoint.id(), exception);
+            player.sendMessage(Component.text("This shelf reward is unavailable. Contact an administrator.",
+                    NamedTextColor.RED));
         }
     }
 

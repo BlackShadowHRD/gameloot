@@ -1,12 +1,16 @@
 package io.github.blackshadowhrd.gameloot.service;
 
 import io.github.blackshadowhrd.gameloot.repository.model.LootPointRecord;
+import io.github.blackshadowhrd.gameloot.repository.model.ShelfRewardItem;
+import io.github.blackshadowhrd.gameloot.model.LootPointTargetType;
 import io.github.blackshadowhrd.gameloot.target.LootPointResolution;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.Player;
+import org.bukkit.block.Shelf;
 import org.bukkit.plugin.Plugin;
 
 import java.util.Optional;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
@@ -39,13 +43,45 @@ public final class LootPointRegistrar {
         }
 
         MutableLootPointTarget target = located.get();
+        if (target.targetType().lootMode() != LootPointTargetType.LootMode.LOOT_TABLE) {
+            return CompletableFuture.completedFuture(Result.SHELF_REQUIRES_FIXED_REGISTRATION);
+        }
+        return register(player, target, lootTable, List.of());
+    }
+
+    public CompletableFuture<Result> registerShelf(Player player) {
+        Optional<MutableLootPointTarget> located = lookupService.findSupportedTarget(player, TARGET_DISTANCE);
+        if (located.isEmpty() || located.get().targetType() != LootPointTargetType.SHELF) {
+            return CompletableFuture.completedFuture(Result.INVALID_SHELF_TARGET);
+        }
+        MutableLootPointTarget target = located.get();
+        if (!(target instanceof MutableBlockLootPointTarget blockTarget)
+                || !(blockTarget.state() instanceof Shelf shelf)) {
+            return CompletableFuture.completedFuture(Result.INVALID_SHELF_TARGET);
+        }
+        Optional<List<ShelfRewardItem>> rewards = ShelfRewardTemplate.capture(
+                shelf.getSnapshotInventory().getContents()
+        );
+        if (rewards.isEmpty()) return CompletableFuture.completedFuture(Result.EMPTY_SHELF);
+        return register(player, target, null, rewards.get());
+    }
+
+    private CompletableFuture<Result> register(
+            Player player,
+            MutableLootPointTarget target,
+            NamespacedKey lootTable,
+            List<ShelfRewardItem> shelfRewards
+    ) {
         if (lookupService.hasMarker(target)) {
             return CompletableFuture.completedFuture(Result.ALREADY_REGISTERED);
         }
 
         UUID id = UUID.randomUUID();
         LootPointRecord record = lookupService.record(target, id, lootTable, player.getUniqueId());
-        return persistenceService.insert(record).thenCompose(inserted -> {
+        CompletableFuture<Boolean> insertion = target.targetType() == LootPointTargetType.SHELF
+                ? persistenceService.insertShelf(record, shelfRewards)
+                : persistenceService.insert(record);
+        return insertion.thenCompose(inserted -> {
             if (!inserted) {
                 return CompletableFuture.completedFuture(Result.PERSISTENCE_FAILURE);
             }
@@ -150,6 +186,9 @@ public final class LootPointRegistrar {
         REGISTERED,
         ALREADY_REGISTERED,
         INVALID_TARGET,
+        INVALID_SHELF_TARGET,
+        SHELF_REQUIRES_FIXED_REGISTRATION,
+        EMPTY_SHELF,
         PERSISTENCE_FAILURE
     }
 

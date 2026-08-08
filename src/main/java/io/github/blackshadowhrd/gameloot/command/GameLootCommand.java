@@ -11,6 +11,8 @@ import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
+import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
+import io.github.blackshadowhrd.gameloot.model.LootPointType;
 import io.github.blackshadowhrd.gameloot.target.LootPointInspection;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
@@ -47,19 +49,22 @@ public final class GameLootCommand {
     private final LootPointLookupService lookupService;
     private final LootGenerationService generationService;
     private final ClaimAdministrationService claimAdministrationService;
+    private final ShelfRewardService shelfRewardService;
 
     public GameLootCommand(
             Plugin plugin,
             LootPointRegistrar registrar,
             LootPointLookupService lookupService,
             LootGenerationService generationService,
-            ClaimAdministrationService claimAdministrationService
+            ClaimAdministrationService claimAdministrationService,
+            ShelfRewardService shelfRewardService
     ) {
         this.plugin = plugin;
         this.registrar = registrar;
         this.lookupService = lookupService;
         this.generationService = generationService;
         this.claimAdministrationService = claimAdministrationService;
+        this.shelfRewardService = shelfRewardService;
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand() {
@@ -69,6 +74,7 @@ public final class GameLootCommand {
                         .executes(this::version))
                 .then(Commands.literal("register")
                         .requires(GameLootCommand::hasAdminPermission)
+                        .then(Commands.literal("shelf").executes(this::registerShelf))
                         .then(Commands.argument(LOOT_TABLE_ARGUMENT, ArgumentTypes.namespacedKey())
                                 .suggests(this::suggestLootTables)
                                 .executes(this::register)))
@@ -102,6 +108,7 @@ public final class GameLootCommand {
 
         if (sender.hasPermission(ADMIN_PERMISSION)) {
             sender.sendMessage(Component.text("/gameloot register <loot-table>"));
+            sender.sendMessage(Component.text("/gameloot register shelf"));
             sender.sendMessage(Component.text("/gameloot deregister"));
             sender.sendMessage(Component.text("/gameloot inspect"));
             sender.sendMessage(Component.text("/gameloot claims"));
@@ -157,9 +164,35 @@ public final class GameLootCommand {
             case ALREADY_REGISTERED ->
                     sender.sendMessage(Component.text("That container is already a loot point.", NamedTextColor.YELLOW));
             case INVALID_TARGET -> sender.sendMessage(SUPPORTED_CONTAINER_HELP);
+            case INVALID_SHELF_TARGET -> sender.sendMessage(Component.text(
+                    "Look at a shelf within 6 blocks to register a fixed shelf reward.", NamedTextColor.YELLOW));
+            case SHELF_REQUIRES_FIXED_REGISTRATION -> sender.sendMessage(Component.text(
+                    "Shelves use /gameloot register shelf.", NamedTextColor.YELLOW));
+            case EMPTY_SHELF -> sender.sendMessage(Component.text(
+                    "Place at least one item stack on the shelf before registering it.", NamedTextColor.YELLOW));
             case PERSISTENCE_FAILURE ->
                     sender.sendMessage(Component.text("Unable to persist this loot point.", NamedTextColor.RED));
         }
+    }
+
+    private int registerShelf(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can register shelf loot points.", NamedTextColor.RED));
+            return 0;
+        }
+        registrar.registerShelf(player).whenComplete((result, exception) -> runOnMainThread(() -> {
+            if (exception != null) {
+                sender.sendMessage(Component.text("Unable to register this shelf.", NamedTextColor.RED));
+                return;
+            }
+            if (result == LootPointRegistrar.Result.REGISTERED) {
+                sender.sendMessage(Component.text("Shelf loot point registered.", NamedTextColor.GREEN));
+            } else {
+                sendRegistrationResult(sender, null, result);
+            }
+        }));
+        return Command.SINGLE_SUCCESS;
     }
 
     private int deregister(CommandContext<CommandSourceStack> context) {
@@ -229,9 +262,12 @@ public final class GameLootCommand {
                     inspection.lootPoint().map(LootPoint::id).map(Object::toString).orElse(null)
             )));
             sender.sendMessage(Component.text("Type: " + inspection.displayType()));
-            sender.sendMessage(Component.text("Loot table: " + valueOrDash(
-                    inspection.lootPoint().map(LootPoint::lootTable).map(NamespacedKey::asString).orElse(null)
-            )));
+            sender.sendMessage(Component.text("Loot table: " + valueOrDash(inspection.lootPoint()
+                    .map(LootPoint::lootTable).map(key -> key == null ? null : key.asString()).orElse(null))));
+            inspection.lootPoint().filter(point -> point.type() == LootPointType.SHELF).ifPresent(point -> {
+                sender.sendMessage(Component.text("Loot mode: Fixed"));
+                sender.sendMessage(Component.text("Reward slots: " + shelfRewardService.rewardSlots(point)));
+            });
             sender.sendMessage(Component.text("Location: " + formatLocation(inspection)));
             if (inspection.markerPresent() && inspection.lootPoint().isEmpty()) {
                 sender.sendMessage(Component.text(
@@ -250,7 +286,8 @@ public final class GameLootCommand {
 
         withTargetLootPoint(player, lootPoint -> {
             sender.sendMessage(Component.text("Loot point: " + lootPoint.id()));
-            sender.sendMessage(Component.text("Loot table: " + lootPoint.lootTable()));
+            sender.sendMessage(Component.text("Loot table: "
+                    + (lootPoint.lootTable() == null ? "-" : lootPoint.lootTable())));
             sender.sendMessage(Component.text(
                     "Total claims: " + claimAdministrationService.claimCount(lootPoint.id())
             ));

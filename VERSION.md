@@ -32,6 +32,10 @@ Implemented:
 - Per-container, per-player, and player/container claim resets
 - UUID-based online and known offline player-profile resolution
 - Active private-session invalidation after claim resets
+- Explicit chest, trapped chest, barrel, copper chest, shulker box, chest
+  minecart, and shelf target support
+- Fixed shelf reward capture and direct all-or-nothing claiming
+- Persistent Paper-serialized shelf templates
 
 Not yet implemented:
 

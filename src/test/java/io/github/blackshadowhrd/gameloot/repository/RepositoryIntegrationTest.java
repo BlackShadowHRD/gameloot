@@ -5,6 +5,7 @@ import io.github.blackshadowhrd.gameloot.model.LootPointType;
 import io.github.blackshadowhrd.gameloot.repository.model.ClaimRecord;
 import io.github.blackshadowhrd.gameloot.repository.model.LootPointDeletion;
 import io.github.blackshadowhrd.gameloot.repository.model.LootPointRecord;
+import io.github.blackshadowhrd.gameloot.repository.model.ShelfRewardItem;
 import org.bukkit.NamespacedKey;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -45,18 +46,20 @@ class RepositoryIntegrationTest {
 
     @Test
     void createsSchemaAndAppliesMigrationIdempotently() {
-        assertEquals(2, schemaVersion());
+        assertEquals(3, schemaVersion());
 
         databaseManager.shutdown();
         openDatabase();
 
-        assertEquals(2, schemaVersion());
+        assertEquals(3, schemaVersion());
     }
 
     @Test
     void migratesLegacyLootTableNamespace() {
         LootPointRecord legacy = record(NamespacedKey.fromString("poiloot:mining_camp/common"));
         lootPoints.insert(legacy).join();
+        ClaimRecord existingClaim = new ClaimRecord(UUID.randomUUID(), legacy.id(), 999L);
+        claims.insert(existingClaim).join();
         databaseManager.executeBlocking(connection -> {
             try (var statement = connection.prepareStatement("UPDATE schema_version SET version = 1")) {
                 statement.executeUpdate();
@@ -69,6 +72,7 @@ class RepositoryIntegrationTest {
 
         LootPointRecord migrated = lootPoints.findById(legacy.id()).join().orElseThrow();
         assertEquals(NamespacedKey.fromString("gameloot:mining_camp/common"), migrated.lootTable());
+        assertEquals(java.util.List.of(existingClaim), claims.findAllBlocking());
     }
 
     @Test
@@ -196,6 +200,32 @@ class RepositoryIntegrationTest {
 
         assertEquals(point, lootPoints.findById(point.id()).join().orElseThrow());
         assertEquals(java.util.List.of(claim), claims.findAllBlocking());
+    }
+
+    @Test
+    void insertsLoadsAndCascadeDeletesShelfRewards() {
+        LootPointRecord shelf = new LootPointRecord(
+                UUID.randomUUID(), UUID.randomUUID(), LootPointType.SHELF,
+                1, 2, 3, null, null, 1234L, UUID.randomUUID()
+        );
+        var rewards = java.util.List.of(
+                new ShelfRewardItem(0, new byte[]{1, 2, 3}),
+                new ShelfRewardItem(2, new byte[]{4, 5, 6})
+        );
+
+        assertTrue(lootPoints.insertShelf(shelf, rewards).join());
+        UUID playerId = UUID.randomUUID();
+        claims.insert(new ClaimRecord(playerId, shelf.id(), 5000L)).join();
+        claims.delete(playerId, shelf.id()).join();
+        var loaded = lootPoints.findAllShelfRewardsBlocking().get(shelf.id());
+        assertEquals(java.util.List.of(0, 2), loaded.stream().map(ShelfRewardItem::slot).toList());
+        assertTrue(java.util.Arrays.equals(new byte[]{1, 2, 3}, loaded.getFirst().serializedItem()));
+
+        LootPointDeletion deletion = lootPoints.delete(shelf.id()).join().orElseThrow();
+        assertEquals(2, deletion.shelfRewards().size());
+        assertTrue(lootPoints.findAllShelfRewardsBlocking().isEmpty());
+        assertTrue(lootPoints.restore(deletion).join());
+        assertEquals(2, lootPoints.findAllShelfRewardsBlocking().get(shelf.id()).size());
     }
 
     private void openDatabase() {

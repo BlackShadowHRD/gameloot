@@ -6,21 +6,14 @@ import io.github.blackshadowhrd.gameloot.target.LootPointInspection;
 import io.github.blackshadowhrd.gameloot.target.LootPointResolution;
 import io.github.blackshadowhrd.gameloot.target.LootPointTarget;
 import org.bukkit.Location;
-import org.bukkit.Material;
 import org.bukkit.NamespacedKey;
-import org.bukkit.block.Barrel;
 import org.bukkit.block.Block;
-import org.bukkit.block.BlockState;
-import org.bukkit.block.Chest;
-import org.bukkit.block.Container;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.Player;
-import org.bukkit.entity.minecart.StorageMinecart;
 import org.bukkit.persistence.PersistentDataContainer;
 import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.plugin.Plugin;
 
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -36,10 +29,16 @@ public final class LootPointLookupService {
     private final Logger logger;
     private final Plugin plugin;
     private final LootPointPersistenceService persistenceService;
+    private final LootPointTargetResolver targetResolver;
 
-    public LootPointLookupService(Plugin plugin, LootPointPersistenceService persistenceService) {
+    public LootPointLookupService(
+            Plugin plugin,
+            LootPointPersistenceService persistenceService,
+            LootPointTargetResolver targetResolver
+    ) {
         this.plugin = plugin;
         this.persistenceService = persistenceService;
+        this.targetResolver = targetResolver;
         idKey = new NamespacedKey(plugin, "loot_point_id");
         lootTableKey = new NamespacedKey(plugin, "loot_table");
         logger = plugin.getLogger();
@@ -90,22 +89,11 @@ public final class LootPointLookupService {
     }
 
     private Optional<MutableLootPointTarget> supportedBlock(Block block) {
-        if (block == null) {
-            return Optional.empty();
-        }
-
-        BlockState state = block.getState();
-        if (!(state instanceof Container container)) {
-            return Optional.empty();
-        }
-        return Optional.of(new MutableBlockLootPointTarget(block, container, displayType(state, block.getType())));
+        return targetResolver.resolve(block);
     }
 
     private Optional<MutableLootPointTarget> supportedEntity(Entity entity) {
-        if (entity instanceof StorageMinecart minecart) {
-            return Optional.of(new MutableEntityLootPointTarget(minecart));
-        }
-        return Optional.empty();
+        return targetResolver.resolve(entity);
     }
 
     Optional<UUID> readMarker(MutableLootPointTarget target) {
@@ -322,22 +310,4 @@ public final class LootPointLookupService {
         logger.warning("Malformed GameLoot data on " + target.description() + ": " + reason);
     }
 
-    private String displayType(BlockState state, Material material) {
-        if (state instanceof Chest) {
-            return "Chest";
-        }
-        if (state instanceof Barrel) {
-            return "Barrel";
-        }
-
-        String[] words = material.name().toLowerCase(Locale.ROOT).split("_");
-        StringBuilder displayName = new StringBuilder();
-        for (String word : words) {
-            if (!displayName.isEmpty()) {
-                displayName.append(' ');
-            }
-            displayName.append(Character.toUpperCase(word.charAt(0))).append(word.substring(1));
-        }
-        return displayName.toString();
-    }
 }

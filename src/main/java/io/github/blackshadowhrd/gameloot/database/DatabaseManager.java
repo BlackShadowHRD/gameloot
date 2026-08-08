@@ -19,7 +19,7 @@ import java.util.logging.Logger;
 
 public final class DatabaseManager {
 
-    private static final int CURRENT_SCHEMA_VERSION = 2;
+    private static final int CURRENT_SCHEMA_VERSION = 3;
     private static final long SHUTDOWN_TIMEOUT_SECONDS = 10;
 
     private final String jdbcUrl;
@@ -145,6 +145,11 @@ public final class DatabaseManager {
                 statement.executeUpdate("UPDATE schema_version SET version = 2");
                 version = 2;
             }
+            if (version < 3) {
+                applyVersionThree(statement);
+                statement.executeUpdate("UPDATE schema_version SET version = 3");
+                version = 3;
+            }
             if (version != CURRENT_SCHEMA_VERSION) {
                 throw new SQLException("Unsupported schema version " + version);
             }
@@ -188,6 +193,50 @@ public final class DatabaseManager {
                 UPDATE loot_points
                 SET loot_table = 'gameloot:' || substr(loot_table, length('poiloot:') + 1)
                 WHERE loot_table LIKE 'poiloot:%'
+                """);
+    }
+
+    private void applyVersionThree(Statement statement) throws SQLException {
+        statement.execute("""
+                CREATE TABLE loot_points_v3 (
+                    id TEXT PRIMARY KEY,
+                    world_uuid TEXT NOT NULL,
+                    target_type TEXT NOT NULL,
+                    x INTEGER NOT NULL,
+                    y INTEGER NOT NULL,
+                    z INTEGER NOT NULL,
+                    entity_uuid TEXT,
+                    loot_table TEXT,
+                    created_at INTEGER NOT NULL,
+                    created_by TEXT,
+                    CHECK ((target_type = 'SHELF' AND loot_table IS NULL)
+                        OR (target_type <> 'SHELF' AND loot_table IS NOT NULL))
+                )
+                """);
+        statement.executeUpdate("INSERT INTO loot_points_v3 SELECT * FROM loot_points");
+        statement.execute("CREATE TEMP TABLE loot_claims_v3 AS SELECT * FROM loot_claims");
+        statement.execute("DROP TABLE loot_claims");
+        statement.execute("DROP TABLE loot_points");
+        statement.execute("ALTER TABLE loot_points_v3 RENAME TO loot_points");
+        statement.execute("""
+                CREATE TABLE loot_claims (
+                    player_uuid TEXT NOT NULL,
+                    loot_point_id TEXT NOT NULL,
+                    claimed_at INTEGER NOT NULL,
+                    PRIMARY KEY (player_uuid, loot_point_id),
+                    FOREIGN KEY (loot_point_id) REFERENCES loot_points(id) ON DELETE CASCADE
+                )
+                """);
+        statement.executeUpdate("INSERT INTO loot_claims SELECT * FROM loot_claims_v3");
+        statement.execute("DROP TABLE loot_claims_v3");
+        statement.execute("""
+                CREATE TABLE IF NOT EXISTS shelf_loot_items (
+                    loot_point_id TEXT NOT NULL,
+                    slot INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 2),
+                    serialized_item BLOB NOT NULL,
+                    PRIMARY KEY (loot_point_id, slot),
+                    FOREIGN KEY (loot_point_id) REFERENCES loot_points(id) ON DELETE CASCADE
+                )
                 """);
     }
 

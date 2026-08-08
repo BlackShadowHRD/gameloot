@@ -91,6 +91,27 @@ class ClaimServiceIntegrationTest {
         assertTrue(claims.isClaimed(playerId, retainedPoint.id()));
     }
 
+    @Test
+    void shelfClaimsArePerPlayerAndReloadFromPersistence() {
+        LootPointRecord shelf = new LootPointRecord(
+                UUID.randomUUID(), UUID.randomUUID(), LootPointType.SHELF,
+                1, 2, 3, null, null, 1234L, UUID.randomUUID()
+        );
+        lootPoints.insertShelf(shelf, java.util.List.of(
+                new io.github.blackshadowhrd.gameloot.repository.model.ShelfRewardItem(0, new byte[]{1})
+        )).join();
+        UUID firstPlayer = UUID.randomUUID();
+        UUID secondPlayer = UUID.randomUUID();
+
+        assertTrue(claims.markClaimed(firstPlayer, shelf.id()).join());
+        assertFalse(claims.markClaimed(firstPlayer, shelf.id()).join());
+        assertTrue(claims.markClaimed(secondPlayer, shelf.id()).join());
+
+        claims.load();
+        assertTrue(claims.isClaimed(firstPlayer, shelf.id()));
+        assertTrue(claims.isClaimed(secondPlayer, shelf.id()));
+    }
+
     private LootPointRecord insertPoint() {
         LootPointRecord point = new LootPointRecord(
                 UUID.randomUUID(),

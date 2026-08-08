@@ -14,6 +14,8 @@ import io.github.blackshadowhrd.gameloot.service.LootPointPersistenceService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
 import io.github.blackshadowhrd.gameloot.service.LootSessionService;
 import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
+import io.github.blackshadowhrd.gameloot.service.LootPointTargetResolver;
+import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -56,7 +58,8 @@ public final class GameLootPlugin extends JavaPlugin {
             return;
         }
 
-        LootPointLookupService lookupService = new LootPointLookupService(this, persistenceService);
+        LootPointTargetResolver targetResolver = new LootPointTargetResolver();
+        LootPointLookupService lookupService = new LootPointLookupService(this, persistenceService, targetResolver);
         LootPointRegistrar registrar = new LootPointRegistrar(
                 this,
                 lookupService,
@@ -66,6 +69,7 @@ public final class GameLootPlugin extends JavaPlugin {
         LootGenerationService generationService = new LootGenerationService(getServer());
         PrivateInventoryService inventoryService = new PrivateInventoryService(getServer());
         LootSessionService sessionService = new LootSessionService(inventoryService);
+        ShelfRewardService shelfRewardService = new ShelfRewardService(this, persistenceService, claimService);
         ClaimAdministrationService claimAdministrationService = new ClaimAdministrationService(
                 this,
                 claimService,
@@ -76,7 +80,8 @@ public final class GameLootPlugin extends JavaPlugin {
                 registrar,
                 lookupService,
                 generationService,
-                claimAdministrationService
+                claimAdministrationService,
+                shelfRewardService
         );
 
         getServer().getPluginManager().registerEvents(
@@ -86,7 +91,8 @@ public final class GameLootPlugin extends JavaPlugin {
                         generationService,
                         inventoryService,
                         claimService,
-                        sessionService
+                        sessionService,
+                        shelfRewardService
                 ),
                 this
         );

@@ -11,14 +11,11 @@ loot points. Each player can receive a private, one-time loot roll from each
 registered point. The physical container is never used to hold or present the
 generated loot.
 
-Current target types are:
-
-- Bukkit/Paper block states implementing `Container`, including chests,
-  barrels, copper containers, and other supported Paper container types;
-- chest minecarts represented by `StorageMinecart`.
-
-`LootPointType.SHELF` is reserved for future work and is not currently a
-supported target.
+Current target types are chests, trapped chests, barrels, every oxidation and
+waxed copper chest variant, every shulker box colour, chest minecarts, and
+shelves. `LootPointTargetType` is the authoritative list and exposes each
+target's persisted type, loot mode, and display name. `LootPointTargetResolver`
+is the only Bukkit block/entity resolver; do not add target checks elsewhere.
 
 The project uses:
 
@@ -83,11 +80,14 @@ io.github.blackshadowhrd.gameloot
 │   ├── ClaimAdministrationService.java
 │   ├── LootGenerationService.java
 │   ├── LootPointLookupService.java
+│   ├── LootPointTargetResolver.java
 │   ├── LootPointPersistenceService.java
 │   ├── LootPointRegistrar.java
 │   ├── LootSessionService.java
 │   ├── MutableLootPointTarget.java
-│   └── PrivateInventoryService.java
+│   ├── PrivateInventoryService.java
+│   ├── ShelfRewardService.java
+│   └── ShelfRewardTemplate.java
 └── target
     ├── BlockLootPointTarget.java
     ├── EntityLootPointTarget.java
@@ -208,6 +208,10 @@ actions when one side fails.
 `Registry.LOOT_TABLES` and generates items with Paper's loot API and a
 `LootContext`.
 
+Shelves bypass loot generation and private sessions. `ShelfRewardTemplate`
+captures and restores exact `ItemStack` bytes. `ShelfRewardService` plans an
+all-or-nothing storage result and coordinates durable claims and delivery.
+
 `PrivateInventoryService` creates and opens Bukkit inventories. It does not
 generate loot, track claims, or manage sessions.
 
@@ -245,7 +249,9 @@ rerollable.
 ```text
 /gameloot
 ├── version
-├── register <loot-table>
+├── register
+│   ├── <loot-table>
+│   └── shelf
 ├── deregister
 ├── inspect
 ├── claims
@@ -273,7 +279,7 @@ thread after asynchronous operations.
 
 ## Persistent data model
 
-### SQLite schema version 2
+### SQLite schema version 3
 
 ```sql
 CREATE TABLE schema_version (
@@ -288,7 +294,7 @@ CREATE TABLE loot_points (
     y INTEGER NOT NULL,
     z INTEGER NOT NULL,
     entity_uuid TEXT,
-    loot_table TEXT NOT NULL,
+    loot_table TEXT,
     created_at INTEGER NOT NULL,
     created_by TEXT
 );
@@ -302,10 +308,22 @@ CREATE TABLE loot_claims (
         REFERENCES loot_points(id)
         ON DELETE CASCADE
 );
+
+CREATE TABLE shelf_loot_items (
+    loot_point_id TEXT NOT NULL,
+    slot INTEGER NOT NULL CHECK (slot BETWEEN 0 AND 2),
+    serialized_item BLOB NOT NULL,
+    PRIMARY KEY (loot_point_id, slot),
+    FOREIGN KEY (loot_point_id)
+        REFERENCES loot_points(id)
+        ON DELETE CASCADE
+);
 ```
 
 UUIDs are canonical strings. Timestamps are epoch milliseconds. The primary
 keys cover current lookups, so no additional indexes are presently required.
+`loot_table` is null only for `SHELF`. Schema version 3 transactionally rebuilds
+the table while preserving all existing points and claims.
 
 Future schema changes must increment `CURRENT_SCHEMA_VERSION` in
 `DatabaseManager` and apply migrations sequentially inside its migration
@@ -392,6 +410,22 @@ preserved when registration code changes.
 
 Different player UUIDs have independent claims for the same loot-point UUID.
 
+### Shelf lifecycle
+
+1. Resolve an explicit shelf and copy its three snapshot slots on the main
+   thread.
+2. Reject an empty template and serialize non-empty stacks with
+   `ItemStack.serializeAsBytes()`.
+3. Insert the point and reward rows in one transaction, then write the PDC
+   marker through the normal compensated registration flow.
+4. Cancel registered-shelf interaction and plan a complete resulting player
+   storage array without changing live inventory state.
+5. Persist the UUID claim atomically, re-plan on the main thread, and replace
+   storage contents once. If capacity changed, delete the claim and transfer
+   nothing.
+6. Deregistration cascades rewards and claims, removes the marker, and leaves
+   the visible shelf contents unchanged.
+
 ### Administrative claim reset
 
 1. The command resolves a player UUID and/or registered targeted loot point.
@@ -444,6 +478,11 @@ Treat these rules as architectural constraints:
 - deletion of all claims for a player;
 - deletion of all claims for a loot point;
 - claim-cache consistency after each reset scope.
+- explicit supported and unsupported target mappings;
+- schema version 3 migration with existing claim preservation;
+- shelf reward insertion, loading, slot preservation, reset independence, and
+  cascading deletion;
+- empty shelf rejection and per-player shelf claim persistence.
 
 The tests use temporary SQLite databases and the test-only Xerial driver.
 There are currently no automated Paper event, command, PDC, or inventory tests;

@@ -42,6 +42,11 @@ All notable changes to GameLoot are documented in this file.
 - Main-thread invalidation of active private sessions after successful resets.
 - Repository and service tests for claim counts, reset scopes, and cache
   consistency.
+- One authoritative target definition for supported containers and shelves.
+- Fixed shelf registration, persistence, interaction protection, and
+  all-or-nothing per-player rewards.
+- Schema version 3 with nullable shelf loot tables and normalized
+  `shelf_loot_items` storage.
 
 ### Changed
 
