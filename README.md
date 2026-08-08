@@ -23,6 +23,10 @@ reset when the server restarts.
 | `/gameloot register <loot-table>` | `gameloot.admin` | Registers the targeted container with a namespaced loot-table key. |
 | `/gameloot deregister` | `gameloot.admin` | Removes GameLoot registration from the targeted container. |
 | `/gameloot inspect` | `gameloot.admin` | Shows the target's registration status, ID, type, loot table, and location. |
+| `/gameloot claims` | `gameloot.admin` | Shows claim information for the targeted loot point. |
+| `/gameloot reset container` | `gameloot.admin` | Resets every claim for the targeted loot point. |
+| `/gameloot reset player <player>` | `gameloot.admin` | Resets every claim belonging to a player UUID. |
+| `/gameloot reset player <player> container` | `gameloot.admin` | Resets one player's claim for the targeted loot point. |
 
 Registration commands require a player to look at a supported container within
 six blocks. The `gameloot.admin` permission is granted to server operators by
@@ -38,6 +42,10 @@ example:
 
 Brigadier completion suggests the loot-table keys currently loaded in the
 server registry, including available vanilla and datapack-defined tables.
+
+The reset-player commands use Paper's player-profile argument. They resolve a
+single online or reliably known offline profile and perform persistence using
+its UUID rather than its current name.
 
 ## Loot-point data
 
@@ -84,6 +92,16 @@ claimable again; failures are logged and access is blocked safely.
 Unclaimed active sessions are deliberately not persisted. Restarting the
 server discards those temporary generated inventories, so reopening after a
 restart generates a new session.
+
+## Claim administration
+
+`/gameloot claims` reports the targeted loot point's UUID, loot-table key,
+persisted claim count, and whether the executing player has claimed it.
+
+Claim resets update SQLite first and then update the in-memory claim cache.
+Successful resets also invalidate affected active private inventories on the
+server thread. This prevents stale claimed sessions from remaining open while
+allowing the next interaction to create a fresh session safely.
 
 ## Building
 

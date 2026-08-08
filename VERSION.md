@@ -28,6 +28,10 @@ Implemented:
 - Versioned database schema and clean database-executor shutdown
 - Registration and deregistration failure compensation
 - Repository integration tests
+- Administrative claim inspection for targeted loot points
+- Per-container, per-player, and player/container claim resets
+- UUID-based online and known offline player-profile resolution
+- Active private-session invalidation after claim resets
 
 Not yet implemented:
 

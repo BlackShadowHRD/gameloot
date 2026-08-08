@@ -80,6 +80,7 @@ io.github.blackshadowhrd.gameloot
 │       └── LootPointRecord.java
 ├── service
 │   ├── ClaimService.java
+│   ├── ClaimAdministrationService.java
 │   ├── LootGenerationService.java
 │   ├── LootPointLookupService.java
 │   ├── LootPointPersistenceService.java
@@ -178,6 +179,10 @@ UUID and loot-point UUID. All persisted claims are loaded at startup. Pending
 and failed writes also remain fail-closed in this cache, preventing a database
 error from allowing another roll during the same server process.
 
+`ClaimAdministrationService` coordinates administrative resets. It delegates
+SQL-backed cache changes to `ClaimService`, then returns to the main thread to
+invalidate affected `LootSessionService` sessions before completing the reset.
+
 ### Registration and lookup
 
 `LootPointLookupService` is the only service responsible for:
@@ -242,7 +247,12 @@ rerollable.
 ├── version
 ├── register <loot-table>
 ├── deregister
-└── inspect
+├── inspect
+├── claims
+└── reset
+    ├── container
+    └── player <player>
+        └── container
 ```
 
 The tree uses `Commands.literal(...)`, `Commands.argument(...)`,
@@ -252,6 +262,10 @@ The tree uses `Commands.literal(...)`, `Commands.argument(...)`,
 require `gameloot.admin`; the Brigadier `requires` predicates also hide those
 branches from unauthorised suggestions. Player-only operations reject console
 and other non-player senders with Adventure messages.
+
+The `player` reset argument uses `ArgumentTypes.playerProfiles()` and requires
+exactly one resolved profile. Paper may resolve known offline profiles; all
+claim operations use the resulting UUID, never the profile name.
 
 The command class delegates registration, lookup, and loot-table resolution to
 services. It schedules user-facing completion messages back onto the main
@@ -378,6 +392,23 @@ preserved when registration code changes.
 
 Different player UUIDs have independent claims for the same loot-point UUID.
 
+### Administrative claim reset
+
+1. The command resolves a player UUID and/or registered targeted loot point.
+2. `ClaimRepository` performs the prepared `DELETE` on the database executor.
+3. Only after database success does `ClaimService` remove matching non-pending
+   cache entries.
+4. Pending claim entries remain fail-closed and follow executor ordering, so a
+   concurrent first-item claim cannot be opened for a duplicate transfer.
+5. `ClaimAdministrationService` schedules affected session invalidation on the
+   main thread.
+6. The session is removed and cleared, and any viewer is closed before the
+   command reports completion.
+
+There is no schema migration for claim administration. Delete counts come from
+SQLite, while interactive claim inspection uses the startup-maintained cache
+and counts only durably persisted claim states.
+
 ## Threading rules
 
 Treat these rules as architectural constraints:
@@ -408,6 +439,11 @@ Treat these rules as architectural constraints:
 - restoration of a deleted loot point and its claims;
 - migration from the former database file path;
 - migration of stored `poiloot:` loot-table keys to `gameloot:`.
+- claim counts;
+- deletion of one claim;
+- deletion of all claims for a player;
+- deletion of all claims for a loot point;
+- claim-cache consistency after each reset scope.
 
 The tests use temporary SQLite databases and the test-only Xerial driver.
 There are currently no automated Paper event, command, PDC, or inventory tests;
@@ -450,8 +486,14 @@ commands unaware of JDBC.
   contents before restart.
 - Fill a player inventory and verify items are not silently discarded.
 - Deregister a point and verify its database claims are cascade-deleted.
-- Check `/gameloot`, `version`, `register`, `deregister`, and `inspect`,
-  including console rejection and permission-aware suggestions.
+- Compare `/gameloot claims` as two independently claimed players.
+- Reset one player's targeted-container claim and verify the other remains.
+- Reset a player's claims globally, including while that player is offline.
+- Reset all claims for a container and verify its registration remains intact.
+- Reset a claim while its private inventory is open and verify the view closes
+  without transferring or duplicating remaining items.
+- Check `/gameloot`, `version`, `register`, `deregister`, `inspect`, `claims`,
+  and `reset`, including console rejection and permission-aware suggestions.
 - Stop the server while persistence work is pending and inspect shutdown logs.
 
 ## Development conventions

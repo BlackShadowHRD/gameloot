@@ -37,6 +37,11 @@ All notable changes to GameLoot are documented in this file.
 - Repository integration tests covering schema creation, registration CRUD,
   duplicate handling, claims, cascading deletion, compensation restoration,
   database-file migration, and loot-table namespace migration.
+- Administrative claim inspection and UUID-based reset commands.
+- Paper player-profile resolution for online and known offline player resets.
+- Main-thread invalidation of active private sessions after successful resets.
+- Repository and service tests for claim counts, reset scopes, and cache
+  consistency.
 
 ### Changed
 

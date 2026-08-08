@@ -7,6 +7,7 @@ import io.github.blackshadowhrd.gameloot.listener.PrivateLootInventoryListener;
 import io.github.blackshadowhrd.gameloot.repository.ClaimRepository;
 import io.github.blackshadowhrd.gameloot.repository.LootPointRepository;
 import io.github.blackshadowhrd.gameloot.service.ClaimService;
+import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootPointPersistenceService;
@@ -65,7 +66,18 @@ public final class GameLootPlugin extends JavaPlugin {
         LootGenerationService generationService = new LootGenerationService(getServer());
         PrivateInventoryService inventoryService = new PrivateInventoryService(getServer());
         LootSessionService sessionService = new LootSessionService(inventoryService);
-        GameLootCommand command = new GameLootCommand(this, registrar, lookupService, generationService);
+        ClaimAdministrationService claimAdministrationService = new ClaimAdministrationService(
+                this,
+                claimService,
+                sessionService
+        );
+        GameLootCommand command = new GameLootCommand(
+                this,
+                registrar,
+                lookupService,
+                generationService,
+                claimAdministrationService
+        );
 
         getServer().getPluginManager().registerEvents(
                 new LootPointInteractionListener(

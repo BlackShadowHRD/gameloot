@@ -119,6 +119,61 @@ class RepositoryIntegrationTest {
     }
 
     @Test
+    void countsClaimsForLootPoint() {
+        LootPointRecord point = record();
+        lootPoints.insert(point).join();
+        claims.insert(new ClaimRecord(UUID.randomUUID(), point.id(), 1000L)).join();
+        claims.insert(new ClaimRecord(UUID.randomUUID(), point.id(), 2000L)).join();
+
+        assertEquals(2, claims.countByLootPoint(point.id()).join());
+    }
+
+    @Test
+    void deletesOneClaim() {
+        LootPointRecord point = record();
+        UUID playerId = UUID.randomUUID();
+        lootPoints.insert(point).join();
+        claims.insert(new ClaimRecord(playerId, point.id(), 1000L)).join();
+
+        assertEquals(1, claims.delete(playerId, point.id()).join());
+        assertEquals(0, claims.delete(playerId, point.id()).join());
+        assertTrue(claims.findAllBlocking().isEmpty());
+    }
+
+    @Test
+    void deletesAllClaimsForPlayer() {
+        LootPointRecord firstPoint = record();
+        LootPointRecord secondPoint = record();
+        UUID playerId = UUID.randomUUID();
+        UUID otherPlayerId = UUID.randomUUID();
+        lootPoints.insert(firstPoint).join();
+        lootPoints.insert(secondPoint).join();
+        claims.insert(new ClaimRecord(playerId, firstPoint.id(), 1000L)).join();
+        claims.insert(new ClaimRecord(playerId, secondPoint.id(), 2000L)).join();
+        ClaimRecord retained = new ClaimRecord(otherPlayerId, firstPoint.id(), 3000L);
+        claims.insert(retained).join();
+
+        assertEquals(2, claims.deleteByPlayer(playerId).join());
+        assertEquals(java.util.List.of(retained), claims.findAllBlocking());
+    }
+
+    @Test
+    void deletesAllClaimsForLootPoint() {
+        LootPointRecord firstPoint = record();
+        LootPointRecord secondPoint = record();
+        UUID playerId = UUID.randomUUID();
+        lootPoints.insert(firstPoint).join();
+        lootPoints.insert(secondPoint).join();
+        claims.insert(new ClaimRecord(playerId, firstPoint.id(), 1000L)).join();
+        claims.insert(new ClaimRecord(UUID.randomUUID(), firstPoint.id(), 2000L)).join();
+        ClaimRecord retained = new ClaimRecord(playerId, secondPoint.id(), 3000L);
+        claims.insert(retained).join();
+
+        assertEquals(2, claims.deleteByLootPoint(firstPoint.id()).join());
+        assertEquals(java.util.List.of(retained), claims.findAllBlocking());
+    }
+
+    @Test
     void deletingLootPointCascadesClaims() {
         LootPointRecord point = record();
         lootPoints.insert(point).join();

@@ -7,6 +7,7 @@ import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import io.github.blackshadowhrd.gameloot.model.LootPoint;
+import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
@@ -14,6 +15,7 @@ import io.github.blackshadowhrd.gameloot.target.LootPointInspection;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
+import io.papermc.paper.command.brigadier.argument.resolvers.PlayerProfileListResolver;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.NamespacedKey;
@@ -22,8 +24,12 @@ import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
+import java.util.Collection;
 import java.util.Locale;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.function.Consumer;
 
 public final class GameLootCommand {
 
@@ -31,6 +37,7 @@ public final class GameLootCommand {
 
     private static final String ADMIN_PERMISSION = "gameloot.admin";
     private static final String LOOT_TABLE_ARGUMENT = "loot-table";
+    private static final String PLAYER_ARGUMENT = "player";
     private static final double TARGET_DISTANCE = 6;
     private static final Component SUPPORTED_CONTAINER_HELP =
             Component.text("Look at a supported container within 6 blocks.");
@@ -39,17 +46,20 @@ public final class GameLootCommand {
     private final LootPointRegistrar registrar;
     private final LootPointLookupService lookupService;
     private final LootGenerationService generationService;
+    private final ClaimAdministrationService claimAdministrationService;
 
     public GameLootCommand(
             Plugin plugin,
             LootPointRegistrar registrar,
             LootPointLookupService lookupService,
-            LootGenerationService generationService
+            LootGenerationService generationService,
+            ClaimAdministrationService claimAdministrationService
     ) {
         this.plugin = plugin;
         this.registrar = registrar;
         this.lookupService = lookupService;
         this.generationService = generationService;
+        this.claimAdministrationService = claimAdministrationService;
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand() {
@@ -67,7 +77,19 @@ public final class GameLootCommand {
                         .executes(this::deregister))
                 .then(Commands.literal("inspect")
                         .requires(GameLootCommand::hasAdminPermission)
-                        .executes(this::inspect));
+                        .executes(this::inspect))
+                .then(Commands.literal("claims")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .executes(this::claims))
+                .then(Commands.literal("reset")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .then(Commands.literal("container")
+                                .executes(this::resetContainer))
+                        .then(Commands.literal("player")
+                                .then(Commands.argument(PLAYER_ARGUMENT, ArgumentTypes.playerProfiles())
+                                        .executes(this::resetPlayer)
+                                        .then(Commands.literal("container")
+                                                .executes(this::resetPlayerContainer)))));
 
         return root.build();
     }
@@ -82,6 +104,10 @@ public final class GameLootCommand {
             sender.sendMessage(Component.text("/gameloot register <loot-table>"));
             sender.sendMessage(Component.text("/gameloot deregister"));
             sender.sendMessage(Component.text("/gameloot inspect"));
+            sender.sendMessage(Component.text("/gameloot claims"));
+            sender.sendMessage(Component.text("/gameloot reset container"));
+            sender.sendMessage(Component.text("/gameloot reset player <player>"));
+            sender.sendMessage(Component.text("/gameloot reset player <player> container"));
         }
 
         return Command.SINGLE_SUCCESS;
@@ -213,6 +239,175 @@ public final class GameLootCommand {
                         NamedTextColor.RED
                 ));
             }
+    }
+
+    private int claims(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can inspect container claims.", NamedTextColor.RED));
+            return 0;
+        }
+
+        withTargetLootPoint(player, lootPoint -> {
+            sender.sendMessage(Component.text("Loot point: " + lootPoint.id()));
+            sender.sendMessage(Component.text("Loot table: " + lootPoint.lootTable()));
+            sender.sendMessage(Component.text(
+                    "Total claims: " + claimAdministrationService.claimCount(lootPoint.id())
+            ));
+            sender.sendMessage(Component.text(
+                    "Claimed by you: " + (claimAdministrationService.hasClaim(
+                            player.getUniqueId(),
+                            lootPoint.id()
+                    ) ? "Yes" : "No")
+            ));
+        });
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int resetContainer(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player player)) {
+            sender.sendMessage(Component.text("Only players can reset container claims.", NamedTextColor.RED));
+            return 0;
+        }
+
+        withTargetLootPoint(player, lootPoint -> claimAdministrationService.resetLootPoint(lootPoint.id())
+                .whenComplete((deleted, exception) -> runOnMainThread(() -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to reset container claims.", NamedTextColor.RED));
+                        return;
+                    }
+                    sender.sendMessage(Component.text(
+                            "Reset " + deleted + " claim" + (deleted == 1 ? "" : "s") + " for this container.",
+                            NamedTextColor.GREEN
+                    ));
+                })));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int resetPlayer(CommandContext<CommandSourceStack> context)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        CommandSender sender = context.getSource().getSender();
+        Optional<ResolvedPlayer> resolved = resolvePlayer(context);
+        if (resolved.isEmpty()) {
+            sender.sendMessage(Component.text("Resolve exactly one player.", NamedTextColor.RED));
+            return 0;
+        }
+
+        ResolvedPlayer player = resolved.get();
+        claimAdministrationService.resetPlayer(player.id()).whenComplete((deleted, exception) ->
+                runOnMainThread(() -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to reset player claims.", NamedTextColor.RED));
+                        return;
+                    }
+                    sender.sendMessage(Component.text(
+                            "Reset " + deleted + " claim" + (deleted == 1 ? "" : "s")
+                                    + " for " + player.displayName() + ".",
+                            NamedTextColor.GREEN
+                    ));
+                })
+        );
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int resetPlayerContainer(CommandContext<CommandSourceStack> context)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        CommandSender sender = context.getSource().getSender();
+        if (!(sender instanceof Player executor)) {
+            sender.sendMessage(Component.text(
+                    "Only players can reset claims for a targeted container.",
+                    NamedTextColor.RED
+            ));
+            return 0;
+        }
+
+        Optional<ResolvedPlayer> resolved = resolvePlayer(context);
+        if (resolved.isEmpty()) {
+            sender.sendMessage(Component.text("Resolve exactly one player.", NamedTextColor.RED));
+            return 0;
+        }
+
+        ResolvedPlayer player = resolved.get();
+        withTargetLootPoint(executor, lootPoint -> claimAdministrationService
+                .resetClaim(player.id(), lootPoint.id())
+                .whenComplete((deleted, exception) -> runOnMainThread(() -> {
+                    if (exception != null) {
+                        sender.sendMessage(Component.text("Unable to reset this claim.", NamedTextColor.RED));
+                        return;
+                    }
+                    if (deleted == 0) {
+                        sender.sendMessage(Component.text(
+                                player.displayName() + " had not claimed this container.",
+                                NamedTextColor.YELLOW
+                        ));
+                        return;
+                    }
+                    sender.sendMessage(Component.text(
+                            "Reset " + player.displayName() + "'s claim for this container.",
+                            NamedTextColor.GREEN
+                    ));
+                })));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private Optional<ResolvedPlayer> resolvePlayer(CommandContext<CommandSourceStack> context)
+            throws com.mojang.brigadier.exceptions.CommandSyntaxException {
+        PlayerProfileListResolver resolver = context.getArgument(
+                PLAYER_ARGUMENT,
+                PlayerProfileListResolver.class
+        );
+        Collection<com.destroystokyo.paper.profile.PlayerProfile> profiles = resolver.resolve(context.getSource());
+        if (profiles.size() != 1) {
+            return Optional.empty();
+        }
+
+        var profile = profiles.iterator().next();
+        UUID id = profile.getId();
+        if (id == null) {
+            return Optional.empty();
+        }
+        return Optional.of(new ResolvedPlayer(id, profile.getName() == null ? id.toString() : profile.getName()));
+    }
+
+    private void withTargetLootPoint(Player player, Consumer<LootPoint> action) {
+        lookupService.inspectTarget(player, TARGET_DISTANCE).whenComplete((inspection, exception) ->
+                runOnMainThread(() -> {
+                    if (exception != null) {
+                        player.sendMessage(Component.text(
+                                "Unable to read this loot point.",
+                                NamedTextColor.RED
+                        ));
+                        return;
+                    }
+                    if (inspection.isEmpty()) {
+                        player.sendMessage(SUPPORTED_CONTAINER_HELP);
+                        return;
+                    }
+
+                    LootPointInspection target = inspection.get();
+                    if (target.lootPoint().isPresent()) {
+                        action.accept(target.lootPoint().get());
+                    } else if (target.markerPresent()) {
+                        player.sendMessage(Component.text(
+                                "The PDC marker has no matching database record. Check the server log.",
+                                NamedTextColor.RED
+                        ));
+                    } else {
+                        player.sendMessage(Component.text(
+                                "That container is not a registered loot point.",
+                                NamedTextColor.YELLOW
+                        ));
+                    }
+                })
+        );
+    }
+
+    private void runOnMainThread(Runnable runnable) {
+        plugin.getServer().getScheduler().runTask(plugin, runnable);
+    }
+
+    private record ResolvedPlayer(UUID id, String displayName) {
     }
 
     private CompletableFuture<Suggestions> suggestLootTables(

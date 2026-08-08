@@ -2,14 +2,17 @@ package io.github.blackshadowhrd.gameloot.service;
 
 import io.github.blackshadowhrd.gameloot.inventory.PrivateLootInventoryHolder;
 import io.github.blackshadowhrd.gameloot.model.LootPoint;
+import org.bukkit.entity.HumanEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 public final class LootSessionService {
@@ -84,6 +87,21 @@ public final class LootSessionService {
 
         sessions.remove(key);
         session.inventory().clear();
+    }
+
+    public void invalidateSessions(Set<ClaimService.ClaimKey> claims) {
+        claims.forEach(claim -> invalidateSession(claim.playerId(), claim.lootPointId()));
+    }
+
+    private void invalidateSession(UUID playerId, UUID lootPointId) {
+        LootSession session = sessions.remove(new SessionKey(playerId, lootPointId));
+        if (session == null) {
+            return;
+        }
+
+        var viewers = List.copyOf(session.inventory().getViewers());
+        session.inventory().clear();
+        viewers.forEach(HumanEntity::closeInventory);
     }
 
     private record SessionKey(UUID playerId, UUID lootPointId) {
