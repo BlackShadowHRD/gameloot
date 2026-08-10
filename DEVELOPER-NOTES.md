@@ -2,7 +2,7 @@
 
 This document is a technical handover for developers continuing work on
 GameLoot. It describes the architecture and behaviour of the
-`0.1.0-SNAPSHOT` development version.
+`26.2-0.2.0` development version.
 
 ## Project overview
 

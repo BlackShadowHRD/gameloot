@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.github.blackshadowhrd"
-version = "0.1.0-SNAPSHOT"
+version = "26.2-0.2.0"
 description = "GameLoot per-player loot system for Paper 26.2"
 
 repositories {

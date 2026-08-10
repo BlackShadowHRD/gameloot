@@ -1,6 +1,6 @@
 # Version
 
-## 0.1.0-SNAPSHOT
+## 26.2-0.2.0
 
 Current development version. This is not a stable release.
 

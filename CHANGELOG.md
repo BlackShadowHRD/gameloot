@@ -2,7 +2,7 @@
 
 All notable changes to GameLoot are documented in this file.
 
-## 0.1.0-SNAPSHOT
+## 26.2-0.2.0
 
 ### Added
 
