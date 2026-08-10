@@ -16,6 +16,8 @@ import io.github.blackshadowhrd.gameloot.service.LootPointPersistenceService;
 import io.github.blackshadowhrd.gameloot.service.LootPointProtectionService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
 import io.github.blackshadowhrd.gameloot.service.LootSessionService;
+import io.github.blackshadowhrd.gameloot.service.LootTableCatalog;
+import io.github.blackshadowhrd.gameloot.service.GameLootLootTableDiscovery;
 import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
 import io.github.blackshadowhrd.gameloot.service.LootPointTargetResolver;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
@@ -73,6 +75,7 @@ public final class GameLootPlugin extends JavaPlugin {
                 claimService
         );
         LootGenerationService generationService = new LootGenerationService(getServer());
+        LootTableCatalog lootTableCatalog = new LootTableCatalog(this, new GameLootLootTableDiscovery());
         ValidationService validationService = new ValidationService(
                 this, persistenceService, validationRepository, lookupService, targetResolver, generationService);
         PrivateInventoryService inventoryService = new PrivateInventoryService(getServer());
@@ -90,7 +93,8 @@ public final class GameLootPlugin extends JavaPlugin {
                 generationService,
                 claimAdministrationService,
                 shelfRewardService,
-                validationService
+                validationService,
+                lootTableCatalog
         );
 
         getServer().getPluginManager().registerEvents(
@@ -113,6 +117,8 @@ public final class GameLootPlugin extends JavaPlugin {
                 new PrivateLootInventoryListener(this, claimService, sessionService),
                 this
         );
+        getServer().getPluginManager().registerEvents(lootTableCatalog, this);
+        lootTableCatalog.refresh();
 
         getLifecycleManager().registerEventHandler(
                 LifecycleEvents.COMMANDS,

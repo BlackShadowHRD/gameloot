@@ -44,6 +44,14 @@ example:
 Brigadier completion suggests the loot-table keys currently loaded in the
 server registry, including available vanilla and datapack-defined tables.
 
+Vanilla suggestions come from Paper's default loot-table registry. GameLoot
+also discovers loaded `gameloot:*` tables from enabled directory and ZIP
+datapacks under the world's `datapacks` directory. It inspects only
+`data/gameloot/loot_table/`, ignores other custom namespaces, and verifies each
+discovered key against the live server before suggesting it. The cached list is
+rebuilt at startup and after `/minecraft:reload`; tab completion never scans
+datapacks directly.
+
 The reset-player commands use Paper's player-profile argument. They resolve a
 single online or reliably known offline profile and perform persistence using
 its UUID rather than its current name.

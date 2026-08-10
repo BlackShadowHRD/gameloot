@@ -81,6 +81,8 @@ io.github.blackshadowhrd.gameloot
 │   ├── ClaimService.java
 │   ├── ClaimAdministrationService.java
 │   ├── LootGenerationService.java
+│   ├── GameLootLootTableDiscovery.java
+│   ├── LootTableCatalog.java
 │   ├── LootPointLookupService.java
 │   ├── LootPointTargetResolver.java
 │   ├── LootPointPersistenceService.java
@@ -237,6 +239,27 @@ never repairs PDC, targets, claims, shelf data, or database rows.
 `LootGenerationService` resolves namespaced keys through
 `Registry.LOOT_TABLES` and generates items with Paper's loot API and a
 `LootContext`.
+
+### Loot-table suggestion catalog
+
+`Registry.LOOT_TABLES` represents Paper's default/Mojang `LootTables` entries,
+so it supplies vanilla completion keys but does not enumerate arbitrary loaded
+datapack resources. `Server#getLootTable(key)` can resolve a known custom key,
+but Paper exposes no API for listing those keys.
+
+`GameLootLootTableDiscovery` therefore examines enabled world datapacks only.
+It supports direct-child directories and ZIPs in the level `datapacks`
+directory, and reads only paths below `data/gameloot/loot_table/`. It does not
+parse JSON, follow symlinks, extract archives, or inspect unrelated namespaces.
+
+`LootTableCatalog` merges default registry keys with discovered `gameloot:*`
+keys that `Server#getLootTable` confirms are loaded. Discovery runs
+asynchronously; live-server validation and atomic cache replacement occur on
+the main thread. Brigadier completion only filters the immutable cached list.
+The catalog is built during plugin enable and rebuilt after Paper's
+`ServerResourcesReloadedEvent`, including `/minecraft:reload`. A failed scan
+logs a warning and leaves vanilla suggestions available. Concurrent refreshes
+use generations so an older scan cannot overwrite a newer result.
 
 Shelves bypass loot generation and private sessions. `ShelfRewardTemplate`
 captures and restores exact `ItemStack` bytes. `ShelfRewardService` plans an

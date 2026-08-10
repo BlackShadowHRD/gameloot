@@ -61,6 +61,9 @@ All notable changes to GameLoot are documented in this file.
   shelf-template validation.
 - Machine-readable validation results distinguishing valid, warning, invalid,
   and unverified registrations.
+- Cached autocomplete for loaded `gameloot:*` loot tables discovered from
+  enabled directory and ZIP datapacks, with automatic refresh after datapack
+  resource reloads.
 
 ### Changed
 

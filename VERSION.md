@@ -52,6 +52,8 @@ Implemented:
 - Batched, non-chunk-loading validation for blocks and chest minecarts
 - Database foreign-key, PDC UUID, loot-table, duplicate-target, and shelf
   reward validation
+- Cached Brigadier autocomplete for loaded `gameloot:*` datapack loot tables
+- Automatic custom loot-table catalog refresh after datapack resource reloads
 
 Not yet implemented:
 

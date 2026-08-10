@@ -11,6 +11,7 @@ import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
+import io.github.blackshadowhrd.gameloot.service.LootTableCatalog;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
 import io.github.blackshadowhrd.gameloot.service.ValidationService;
 import io.github.blackshadowhrd.gameloot.model.LootPointType;
@@ -25,13 +26,11 @@ import io.papermc.paper.command.brigadier.argument.resolvers.PlayerProfileListRe
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 import org.bukkit.NamespacedKey;
-import org.bukkit.Registry;
 import org.bukkit.command.CommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
 import java.util.Collection;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -56,6 +55,7 @@ public final class GameLootCommand {
     private final ClaimAdministrationService claimAdministrationService;
     private final ShelfRewardService shelfRewardService;
     private final ValidationService validationService;
+    private final LootTableCatalog lootTableCatalog;
 
     public GameLootCommand(
             Plugin plugin,
@@ -64,7 +64,8 @@ public final class GameLootCommand {
             LootGenerationService generationService,
             ClaimAdministrationService claimAdministrationService,
             ShelfRewardService shelfRewardService,
-            ValidationService validationService
+            ValidationService validationService,
+            LootTableCatalog lootTableCatalog
     ) {
         this.plugin = plugin;
         this.registrar = registrar;
@@ -73,6 +74,7 @@ public final class GameLootCommand {
         this.claimAdministrationService = claimAdministrationService;
         this.shelfRewardService = shelfRewardService;
         this.validationService = validationService;
+        this.lootTableCatalog = lootTableCatalog;
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand() {
@@ -521,11 +523,7 @@ public final class GameLootCommand {
             SuggestionsBuilder builder
     ) {
         String prefix = builder.getRemainingLowerCase();
-        Registry.LOOT_TABLES.keyStream()
-                .map(NamespacedKey::asString)
-                .filter(key -> key.toLowerCase(Locale.ROOT).startsWith(prefix))
-                .sorted()
-                .forEach(builder::suggest);
+        lootTableCatalog.suggestions(prefix).forEach(builder::suggest);
         return builder.buildFuture();
     }
 
