@@ -72,6 +72,7 @@ io.github.blackshadowhrd.gameloot
 ├── repository
 │   ├── ClaimRepository.java
 │   ├── LootPointRepository.java
+│   ├── ValidationRepository.java
 │   └── model
 │       ├── ClaimRecord.java
 │       ├── LootPointDeletion.java
@@ -90,13 +91,21 @@ io.github.blackshadowhrd.gameloot
 │   ├── MutableLootPointTarget.java
 │   ├── PrivateInventoryService.java
 │   ├── ShelfRewardService.java
-│   └── ShelfRewardTemplate.java
-└── target
+│   ├── ShelfRewardTemplate.java
+│   └── ValidationService.java
+├── target
     ├── BlockLootPointTarget.java
     ├── EntityLootPointTarget.java
     ├── LootPointInspection.java
     ├── LootPointResolution.java
     └── LootPointTarget.java
+└── validation
+    ├── DatabaseIntegrityReport.java
+    ├── LootPointValidationResult.java
+    ├── ValidationDecisions.java
+    ├── ValidationIssue.java
+    ├── ValidationReport.java
+    └── ValidationStatus.java
 ```
 
 Repository integration tests are in
@@ -205,6 +214,24 @@ PDC parsing must not be duplicated in commands or listeners.
 database operation and the main-thread PDC operation, including compensating
 actions when one side fails.
 
+### Read-only validation
+
+`ValidationRepository` runs bulk read-only integrity checks on the database
+executor, including `PRAGMA foreign_key_check`, UUID and target-type structure,
+loot-table key structure, and shelf rows attached to non-shelf records.
+
+`ValidationService` snapshots the persistence cache, detects duplicate stored
+physical identities, and inspects live targets in batches of 50 records per
+server tick. It checks world and chunk availability before block access and
+never loads chunks. Chest minecarts use `World#getEntity(UUID)`, which exposes
+only currently available entities. Its PDC inspection path cannot trigger
+legacy migration.
+
+The immutable `validation` model stores machine-readable issues and derives
+`VALID`, `WARNING`, `INVALID`, or `UNVERIFIED` for each record. The command
+prints aggregate counts and logs individual invalid or warning records. It
+never repairs PDC, targets, claims, shelf data, or database rows.
+
 ### Loot generation and inventories
 
 `LootGenerationService` resolves namespaced keys through
@@ -285,6 +312,7 @@ rerollable.
 ├── deregister
 ├── inspect
 ├── claims
+├── validate
 └── reset
     ├── container
     └── player <player>
@@ -514,6 +542,9 @@ Treat these rules as architectural constraints:
 - shelf reward insertion, loading, slot preservation, reset independence, and
   cascading deletion;
 - empty shelf rejection and per-player shelf claim persistence.
+- validation classification for loaded, unavailable, missing, mismatched, and
+  corrupt targets or metadata;
+- read-only database integrity reporting, including foreign-key violations.
 
 The tests use temporary SQLite databases and the test-only Xerial driver.
 There are currently no automated Paper event, command, PDC, or inventory tests;
@@ -525,12 +556,18 @@ harness.
 - Active unclaimed inventory sessions exist only in memory. A restart discards
   them and permits a fresh generation for an unclaimed point.
 - Generated inventory contents are not stored in SQLite.
-- GameLoot does not automatically validate or remove database rows whose
-  physical target was removed by an external administration tool. A future
-  validation/cleanup command should report these orphaned registrations.
+- GameLoot does not automatically remove database rows whose physical target
+  was removed by an external administration tool. `/gameloot validate` reports
+  inspectable orphaned registrations but does not repair or remove them.
 - Explicit plugin or administrator mutations that do not raise cancellable
   Bukkit gameplay events can bypass protection. WorldEdit integration is not
   included.
+- Block rows persist the broad `BLOCK_CONTAINER` category rather than the exact
+  chest/barrel/copper/shulker subtype. Validation detects unsupported or
+  shelf/entity replacements but cannot distinguish replacement by another
+  supported standard container subtype.
+- Validation starts from the database-backed in-memory registration index and
+  does not scan worlds for PDC markers that have no database record.
 - There are no player statistics, achievements, discoveries, or objective
   progress repositories yet.
 - The database uses one short-lived connection per operation rather than a
@@ -580,6 +617,20 @@ commands unaware of JDBC.
   that neither status grants a protection bypass.
 - In Spectator mode, verify vanilla non-mutating interaction remains available
   and no GameLoot private inventory or shelf reward is opened or claimed.
+- Run `/gameloot validate` from console and an authorised player.
+- Validate an unloaded target chunk and confirm `UNVERIFIED` without loading
+  the chunk; repeat with an unavailable world.
+- Remove a target from an already-loaded chunk using an external tool and
+  confirm `INVALID` without database or claim deletion.
+- Replace a target with an unsupported block, remove its PDC marker, and then
+  use a different UUID marker; verify each specific issue is reported.
+- Remove a registered datapack loot table and confirm `MISSING_LOOT_TABLE`.
+- Validate a chest minecart while loaded, with its chunk unloaded, and after
+  external removal from a loaded chunk.
+- Validate shelf records with valid, missing, and deliberately corrupt reward
+  data on a disposable database.
+- Compare the reported database-integrity state with an independent
+  `PRAGMA foreign_key_check`.
 
 ## Development conventions
 

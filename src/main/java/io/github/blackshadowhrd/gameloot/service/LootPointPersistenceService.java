@@ -34,6 +34,10 @@ public final class LootPointPersistenceService {
         return Optional.ofNullable(records.get(id));
     }
 
+    public List<LootPointRecord> records() {
+        return List.copyOf(records.values());
+    }
+
     public CompletableFuture<Boolean> insert(LootPointRecord record) {
         return repository.insert(record).thenApply(inserted -> {
             if (inserted) {

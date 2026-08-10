@@ -30,6 +30,7 @@ class RepositoryIntegrationTest {
     private DatabaseManager databaseManager;
     private LootPointRepository lootPoints;
     private ClaimRepository claims;
+    private ValidationRepository validation;
 
     @BeforeEach
     void setUp() {
@@ -228,11 +229,43 @@ class RepositoryIntegrationTest {
         assertEquals(2, lootPoints.findAllShelfRewardsBlocking().get(shelf.id()).size());
     }
 
+    @Test
+    void validationReportsHealthyDatabaseIntegrity() {
+        LootPointRecord point = record();
+        lootPoints.insert(point).join();
+        claims.insert(new ClaimRecord(UUID.randomUUID(), point.id(), 1234L)).join();
+
+        assertTrue(validation.validateIntegrity().join().valid());
+    }
+
+    @Test
+    void validationRepresentsForeignKeyFailures() {
+        databaseManager.executeBlocking(connection -> {
+            try (var pragma = connection.createStatement()) {
+                pragma.execute("PRAGMA foreign_keys = OFF");
+            }
+            try (var statement = connection.prepareStatement("""
+                    INSERT INTO loot_claims(player_uuid, loot_point_id, claimed_at) VALUES (?, ?, ?)
+                    """)) {
+                statement.setString(1, UUID.randomUUID().toString());
+                statement.setString(2, UUID.randomUUID().toString());
+                statement.setLong(3, 1234L);
+                statement.executeUpdate();
+            }
+            return null;
+        });
+
+        var report = validation.validateIntegrity().join();
+        assertFalse(report.valid());
+        assertTrue(report.violations().stream().anyMatch(value -> value.contains("loot_claims")));
+    }
+
     private void openDatabase() {
         databaseManager = new DatabaseManager(databasePath, Logger.getLogger("GameLootTest"));
         databaseManager.initialize(databasePath);
         lootPoints = new LootPointRepository(databaseManager);
         claims = new ClaimRepository(databaseManager);
+        validation = new ValidationRepository(databaseManager);
     }
 
     private int schemaVersion() {

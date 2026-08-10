@@ -56,6 +56,11 @@ All notable changes to GameLoot are documented in this file.
 - Game-mode policy coverage for Survival, Adventure, Creative, and Spectator.
 - Protection decision tests for piston movement, inventory transfers, and
   loot interaction by game mode.
+- Read-only `/gameloot validate` command with batched world checks, database
+  integrity reporting, PDC and target validation, loot-table resolution, and
+  shelf-template validation.
+- Machine-readable validation results distinguishing valid, warning, invalid,
+  and unverified registrations.
 
 ### Changed
 

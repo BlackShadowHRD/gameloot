@@ -24,6 +24,7 @@ memory and reset when the server restarts.
 | `/gameloot deregister` | `gameloot.admin` | Removes GameLoot registration from the targeted container. |
 | `/gameloot inspect` | `gameloot.admin` | Shows the target's registration status, ID, type, loot table, and location. |
 | `/gameloot claims` | `gameloot.admin` | Shows claim information for the targeted loot point. |
+| `/gameloot validate` | `gameloot.admin` | Checks database and loaded-world registration consistency. |
 | `/gameloot reset container` | `gameloot.admin` | Resets every claim for the targeted loot point. |
 | `/gameloot reset player <player>` | `gameloot.admin` | Resets every claim belonging to a player UUID. |
 | `/gameloot reset player <player> container` | `gameloot.admin` | Resets one player's claim for the targeted loot point. |
@@ -131,7 +132,27 @@ Harmless Creative pick-block actions remain unaffected.
 
 If a physical target disappears despite these protections, GameLoot retains
 its database registration and claims. It does not silently clean up persistent
-data; future validation tooling can report and repair orphaned registrations.
+data; `/gameloot validate` can report orphaned registrations but never repairs
+or removes them.
+
+## Validation
+
+`/gameloot validate` performs a completely read-only consistency check starting
+from the authoritative SQLite loot-point catalogue. It checks database
+integrity, loaded worlds and targets, PDC UUID markers, loaded loot tables,
+chest-minecart identity, duplicate physical registrations, and shelf reward
+templates. Individual invalid and warning records are logged while the command
+sender receives a concise summary.
+
+- `VALID` means every applicable check succeeded.
+- `WARNING` means the target is usable but has a non-fatal anomaly.
+- `INVALID` means an inspectable target or its metadata has a definite error.
+- `UNVERIFIED` means inspection would require an unavailable world or unloaded
+  chunk.
+
+Validation never loads chunks, changes PDC or shelf contents, repairs targets,
+or writes to SQLite. Missing targets and claims remain persisted. It does not
+scan every loaded block for PDC markers without database rows.
 
 ## Claim administration
 

@@ -12,8 +12,12 @@ import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
+import io.github.blackshadowhrd.gameloot.service.ValidationService;
 import io.github.blackshadowhrd.gameloot.model.LootPointType;
 import io.github.blackshadowhrd.gameloot.target.LootPointInspection;
+import io.github.blackshadowhrd.gameloot.validation.LootPointValidationResult;
+import io.github.blackshadowhrd.gameloot.validation.ValidationReport;
+import io.github.blackshadowhrd.gameloot.validation.ValidationStatus;
 import io.papermc.paper.command.brigadier.CommandSourceStack;
 import io.papermc.paper.command.brigadier.Commands;
 import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
@@ -28,6 +32,7 @@ import org.bukkit.plugin.Plugin;
 
 import java.util.Collection;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
@@ -50,6 +55,7 @@ public final class GameLootCommand {
     private final LootGenerationService generationService;
     private final ClaimAdministrationService claimAdministrationService;
     private final ShelfRewardService shelfRewardService;
+    private final ValidationService validationService;
 
     public GameLootCommand(
             Plugin plugin,
@@ -57,7 +63,8 @@ public final class GameLootCommand {
             LootPointLookupService lookupService,
             LootGenerationService generationService,
             ClaimAdministrationService claimAdministrationService,
-            ShelfRewardService shelfRewardService
+            ShelfRewardService shelfRewardService,
+            ValidationService validationService
     ) {
         this.plugin = plugin;
         this.registrar = registrar;
@@ -65,6 +72,7 @@ public final class GameLootCommand {
         this.generationService = generationService;
         this.claimAdministrationService = claimAdministrationService;
         this.shelfRewardService = shelfRewardService;
+        this.validationService = validationService;
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand() {
@@ -87,6 +95,9 @@ public final class GameLootCommand {
                 .then(Commands.literal("claims")
                         .requires(GameLootCommand::hasAdminPermission)
                         .executes(this::claims))
+                .then(Commands.literal("validate")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .executes(this::validate))
                 .then(Commands.literal("reset")
                         .requires(GameLootCommand::hasAdminPermission)
                         .then(Commands.literal("container")
@@ -112,6 +123,7 @@ public final class GameLootCommand {
             sender.sendMessage(Component.text("/gameloot deregister"));
             sender.sendMessage(Component.text("/gameloot inspect"));
             sender.sendMessage(Component.text("/gameloot claims"));
+            sender.sendMessage(Component.text("/gameloot validate"));
             sender.sendMessage(Component.text("/gameloot reset container"));
             sender.sendMessage(Component.text("/gameloot reset player <player>"));
             sender.sendMessage(Component.text("/gameloot reset player <player> container"));
@@ -299,6 +311,63 @@ public final class GameLootCommand {
             ));
         });
         return Command.SINGLE_SUCCESS;
+    }
+
+    private int validate(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        sender.sendMessage(Component.text("GameLoot validation started...", NamedTextColor.YELLOW));
+        validationService.validate().whenComplete((report, exception) -> runOnMainThread(() -> {
+            if (exception != null) {
+                sender.sendMessage(Component.text(
+                        "GameLoot validation failed. Check the server log.", NamedTextColor.RED));
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "GameLoot validation failed", exception);
+                return;
+            }
+            sendValidationReport(sender, report);
+            logValidationDetails(report);
+        }));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendValidationReport(CommandSender sender, ValidationReport report) {
+        sender.sendMessage(Component.text("GameLoot validation complete", NamedTextColor.GREEN));
+        sender.sendMessage(Component.text("Loot points: " + report.lootPoints().size()));
+        sender.sendMessage(Component.text("Valid: " + report.count(ValidationStatus.VALID)));
+        sender.sendMessage(Component.text("Warnings: " + report.count(ValidationStatus.WARNING)));
+        sender.sendMessage(Component.text("Invalid: " + report.count(ValidationStatus.INVALID)));
+        sender.sendMessage(Component.text("Unverified: " + report.count(ValidationStatus.UNVERIFIED)));
+        sender.sendMessage(Component.text(
+                "Database integrity: " + (report.databaseIntegrity().valid() ? "OK" : "FAILED"),
+                report.databaseIntegrity().valid() ? NamedTextColor.GREEN : NamedTextColor.RED));
+        report.issueCounts().entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .forEach(entry -> sender.sendMessage(Component.text(
+                        entry.getKey().description() + ": " + entry.getValue(),
+                        issueColor(entry.getKey().status()))));
+    }
+
+    private void logValidationDetails(ValidationReport report) {
+        report.lootPoints().stream()
+                .filter(result -> result.status() == ValidationStatus.INVALID
+                        || result.status() == ValidationStatus.WARNING)
+                .forEach(result -> plugin.getLogger().warning(formatValidationResult(result)));
+        report.databaseIntegrity().violations().forEach(violation ->
+                plugin.getLogger().severe("GameLoot database integrity: " + violation));
+    }
+
+    private String formatValidationResult(LootPointValidationResult result) {
+        var point = result.lootPoint();
+        return "GameLoot validation " + result.status() + " for " + point.id()
+                + " in world " + point.worldUuid() + " at (" + point.x() + ", " + point.y() + ", "
+                + point.z() + "): " + result.issues();
+    }
+
+    private NamedTextColor issueColor(ValidationStatus status) {
+        return switch (status) {
+            case INVALID -> NamedTextColor.RED;
+            case WARNING, UNVERIFIED -> NamedTextColor.YELLOW;
+            case VALID -> NamedTextColor.GREEN;
+        };
     }
 
     private int resetContainer(CommandContext<CommandSourceStack> context) {

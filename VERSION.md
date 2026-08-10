@@ -48,6 +48,10 @@ Implemented:
 - Harmless Creative pick-block support
 - Protection policy tests for movement, inventory transfer, and game-mode
   decisions
+- Read-only administrative `/gameloot validate` consistency reporting
+- Batched, non-chunk-loading validation for blocks and chest minecarts
+- Database foreign-key, PDC UUID, loot-table, duplicate-target, and shelf
+  reward validation
 
 Not yet implemented:
 

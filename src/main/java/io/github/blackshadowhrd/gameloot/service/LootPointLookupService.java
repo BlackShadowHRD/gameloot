@@ -62,6 +62,11 @@ public final class LootPointLookupService {
         return supportedEntity(entity).map(this::hasMarker).orElse(false);
     }
 
+    MarkerInspection inspectMarker(MutableLootPointTarget target) {
+        if (!hasMarker(target)) return new MarkerInspection(false, Optional.empty());
+        return new MarkerInspection(true, readMarker(target));
+    }
+
     public CompletableFuture<Optional<LootPointInspection>> inspectTarget(Player player, double maxDistance) {
         Optional<MutableLootPointTarget> supportedTarget = findSupportedTarget(player, maxDistance);
         if (supportedTarget.isEmpty()) {
@@ -317,5 +322,7 @@ public final class LootPointLookupService {
     private void logMalformed(MutableLootPointTarget target, String reason) {
         logger.warning("Malformed GameLoot data on " + target.description() + ": " + reason);
     }
+
+    record MarkerInspection(boolean present, Optional<UUID> id) { }
 
 }

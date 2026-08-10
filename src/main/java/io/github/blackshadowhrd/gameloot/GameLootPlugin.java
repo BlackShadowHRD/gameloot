@@ -7,6 +7,7 @@ import io.github.blackshadowhrd.gameloot.listener.LootPointProtectionListener;
 import io.github.blackshadowhrd.gameloot.listener.PrivateLootInventoryListener;
 import io.github.blackshadowhrd.gameloot.repository.ClaimRepository;
 import io.github.blackshadowhrd.gameloot.repository.LootPointRepository;
+import io.github.blackshadowhrd.gameloot.repository.ValidationRepository;
 import io.github.blackshadowhrd.gameloot.service.ClaimService;
 import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
@@ -18,6 +19,7 @@ import io.github.blackshadowhrd.gameloot.service.LootSessionService;
 import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
 import io.github.blackshadowhrd.gameloot.service.LootPointTargetResolver;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
+import io.github.blackshadowhrd.gameloot.service.ValidationService;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.java.JavaPlugin;
 
@@ -47,6 +49,7 @@ public final class GameLootPlugin extends JavaPlugin {
 
         LootPointRepository lootPointRepository = new LootPointRepository(databaseManager);
         ClaimRepository claimRepository = new ClaimRepository(databaseManager);
+        ValidationRepository validationRepository = new ValidationRepository(databaseManager);
         LootPointPersistenceService persistenceService = new LootPointPersistenceService(lootPointRepository);
         ClaimService claimService = new ClaimService(claimRepository, getLogger());
         try {
@@ -70,6 +73,8 @@ public final class GameLootPlugin extends JavaPlugin {
                 claimService
         );
         LootGenerationService generationService = new LootGenerationService(getServer());
+        ValidationService validationService = new ValidationService(
+                this, persistenceService, validationRepository, lookupService, targetResolver, generationService);
         PrivateInventoryService inventoryService = new PrivateInventoryService(getServer());
         LootSessionService sessionService = new LootSessionService(inventoryService);
         ShelfRewardService shelfRewardService = new ShelfRewardService(this, persistenceService, claimService);
@@ -84,7 +89,8 @@ public final class GameLootPlugin extends JavaPlugin {
                 lookupService,
                 generationService,
                 claimAdministrationService,
-                shelfRewardService
+                shelfRewardService,
+                validationService
         );
 
         getServer().getPluginManager().registerEvents(
