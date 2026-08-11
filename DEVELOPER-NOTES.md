@@ -68,7 +68,9 @@ io.github.blackshadowhrd.gameloot
 │   └── PrivateLootInventoryListener.java
 ├── model
 │   ├── LootPoint.java
-│   └── LootPointType.java
+│   ├── LootPointListEntry.java
+│   ├── LootPointType.java
+│   └── Page.java
 ├── repository
 │   ├── ClaimRepository.java
 │   ├── LootPointRepository.java
@@ -80,10 +82,15 @@ io.github.blackshadowhrd.gameloot
 ├── service
 │   ├── ClaimService.java
 │   ├── ClaimAdministrationService.java
+│   ├── ConfirmationService.java
+│   ├── CsvWriter.java
 │   ├── LootGenerationService.java
 │   ├── GameLootLootTableDiscovery.java
 │   ├── LootTableCatalog.java
 │   ├── LootPointLookupService.java
+│   ├── LootPointListingService.java
+│   ├── LootPointCsvExporter.java
+│   ├── LootPointCsvExportService.java
 │   ├── LootPointTargetResolver.java
 │   ├── LootPointPersistenceService.java
 │   ├── LootPointProtectionPolicy.java
@@ -196,6 +203,31 @@ error from allowing another roll during the same server process.
 `ClaimAdministrationService` coordinates administrative resets. It delegates
 SQL-backed cache changes to `ClaimService`, then returns to the main thread to
 invalidate affected `LootSessionService` sessions before completing the reset.
+
+Reset-all confirmation state is held by `ConfirmationService`, keyed by player
+UUID, the console identity, or a scoped sender type/name. Tokens expire after
+30 seconds, are single-use, and are purged once per second. No sender objects
+are retained.
+
+`ClaimService.resetAll()` gates new claim reservations while the single database
+executor orders prior inserts before `DELETE FROM loot_claims`. Cache clearing
+occurs only after database success; the gate remains closed until
+`ClaimAdministrationService` invalidates all affected sessions on the main
+thread.
+
+`LootPointListingService` performs one ordered repository query (`world_uuid`,
+`x`, `z`, `y`, `id`) and returns to the main thread for loaded-world and entity
+lookups. It never loads chunks. The pure `Page` model slices ten entries for
+Adventure formatting and navigation.
+
+`LootPointCsvExportService` reuses that same ordered list future, then hands its
+immutable DTOs to `LootPointCsvExporter` on an asynchronous scheduler thread.
+No Bukkit objects are accessed during file output. Exports are UTF-8 under the
+fixed `exports` child of the plugin data directory. `CsvWriter` uses CRLF rows,
+doubles embedded quotes, and quotes fields containing commas, quotes, or line
+breaks. The schema order is `id,target_type,world,world_uuid,x,y,z,entity_uuid,`
+`loot_mode,loot_table,teleport_command`; shelves use `FIXED` and a blank loot
+table. Filenames use a UTC timestamp and incrementing suffix on collision.
 
 ### Registration and lookup
 
@@ -336,7 +368,12 @@ rerollable.
 ├── inspect
 ├── claims
 ├── validate
+├── list
+│   ├── <page>
+│   └── csv
 └── reset
+    ├── all
+    │   └── confirm
     ├── container
     └── player <player>
         └── container
@@ -654,6 +691,24 @@ commands unaware of JDBC.
   data on a disposable database.
 - Compare the reported database-integrity state with an independent
   `PRAGMA foreign_key_check`.
+- Run `/gameloot reset all` and verify no claim changes before confirmation.
+- Confirm as a different player and verify it is rejected; repeat after 30
+  seconds and verify expiry.
+- Confirm correctly from a player and console, verify the deleted count, and
+  confirm registrations, PDC markers, loot tables, and shelf rewards remain.
+- Keep claimed private inventories open during reset-all and verify they close
+  safely without duplication.
+- Test `/gameloot list` with zero, one, ten, and eleven registrations; verify
+  invalid pages and clickable Previous/Next controls.
+- Verify list ordering, shelf labels, unavailable-world UUIDs, loaded and
+  unloaded chest-minecart locations, and suggested teleport commands.
+- Run `/gameloot list csv` with an empty database and verify a header-only file.
+- Export mixed standard containers, shelves, and chest minecarts; verify all
+  rows, deterministic ordering, blank shelf loot tables, entity UUIDs, and
+  deterministic persisted-coordinate teleport commands.
+- Export twice within one second and verify the second filename uses a suffix
+  without overwriting the first file.
+- Verify commas, quotes, and line breaks are correctly quoted in CSV fields.
 
 ## Development conventions
 

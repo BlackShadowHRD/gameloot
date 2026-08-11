@@ -41,6 +41,11 @@ public final class ClaimAdministrationService {
         return completeReset(claimService.resetLootPoint(lootPointId));
     }
 
+    public CompletableFuture<Integer> resetAll() {
+        return completeReset(claimService.resetAll())
+                .whenComplete((result, exception) -> claimService.finishResetAll());
+    }
+
     private CompletableFuture<Integer> completeReset(
             CompletableFuture<ClaimService.ClaimResetResult> reset
     ) {

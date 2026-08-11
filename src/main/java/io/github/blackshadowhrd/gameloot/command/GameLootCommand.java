@@ -1,15 +1,21 @@
 package io.github.blackshadowhrd.gameloot.command;
 
 import com.mojang.brigadier.Command;
+import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import com.mojang.brigadier.context.CommandContext;
 import com.mojang.brigadier.suggestion.Suggestions;
 import com.mojang.brigadier.suggestion.SuggestionsBuilder;
 import com.mojang.brigadier.tree.LiteralCommandNode;
 import io.github.blackshadowhrd.gameloot.model.LootPoint;
+import io.github.blackshadowhrd.gameloot.model.LootPointListEntry;
+import io.github.blackshadowhrd.gameloot.model.Page;
 import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
+import io.github.blackshadowhrd.gameloot.service.ConfirmationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
+import io.github.blackshadowhrd.gameloot.service.LootPointListingService;
+import io.github.blackshadowhrd.gameloot.service.LootPointCsvExportService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
 import io.github.blackshadowhrd.gameloot.service.LootTableCatalog;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
@@ -25,8 +31,11 @@ import io.papermc.paper.command.brigadier.argument.ArgumentTypes;
 import io.papermc.paper.command.brigadier.argument.resolvers.PlayerProfileListResolver;
 import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
+import net.kyori.adventure.text.event.ClickEvent;
+import net.kyori.adventure.text.event.HoverEvent;
 import org.bukkit.NamespacedKey;
 import org.bukkit.command.CommandSender;
+import org.bukkit.command.ConsoleCommandSender;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.Plugin;
 
@@ -44,6 +53,9 @@ public final class GameLootCommand {
     private static final String ADMIN_PERMISSION = "gameloot.admin";
     private static final String LOOT_TABLE_ARGUMENT = "loot-table";
     private static final String PLAYER_ARGUMENT = "player";
+    private static final String PAGE_ARGUMENT = "page";
+    private static final String RESET_ALL_ACTION = "reset-all-claims";
+    private static final int LIST_PAGE_SIZE = 10;
     private static final double TARGET_DISTANCE = 6;
     private static final Component SUPPORTED_CONTAINER_HELP =
             Component.text("Look at a supported container within 6 blocks.");
@@ -56,6 +68,9 @@ public final class GameLootCommand {
     private final ShelfRewardService shelfRewardService;
     private final ValidationService validationService;
     private final LootTableCatalog lootTableCatalog;
+    private final LootPointListingService listingService;
+    private final ConfirmationService confirmationService;
+    private final LootPointCsvExportService csvExportService;
 
     public GameLootCommand(
             Plugin plugin,
@@ -65,7 +80,10 @@ public final class GameLootCommand {
             ClaimAdministrationService claimAdministrationService,
             ShelfRewardService shelfRewardService,
             ValidationService validationService,
-            LootTableCatalog lootTableCatalog
+            LootTableCatalog lootTableCatalog,
+            LootPointListingService listingService,
+            ConfirmationService confirmationService,
+            LootPointCsvExportService csvExportService
     ) {
         this.plugin = plugin;
         this.registrar = registrar;
@@ -75,6 +93,9 @@ public final class GameLootCommand {
         this.shelfRewardService = shelfRewardService;
         this.validationService = validationService;
         this.lootTableCatalog = lootTableCatalog;
+        this.listingService = listingService;
+        this.confirmationService = confirmationService;
+        this.csvExportService = csvExportService;
     }
 
     public LiteralCommandNode<CommandSourceStack> createCommand() {
@@ -100,8 +121,18 @@ public final class GameLootCommand {
                 .then(Commands.literal("validate")
                         .requires(GameLootCommand::hasAdminPermission)
                         .executes(this::validate))
+                .then(Commands.literal("list")
+                        .requires(GameLootCommand::hasAdminPermission)
+                        .executes(context -> list(context, 1))
+                        .then(Commands.literal("csv").executes(this::exportCsv))
+                        .then(Commands.argument(PAGE_ARGUMENT, IntegerArgumentType.integer(1))
+                                .executes(context -> list(context,
+                                        IntegerArgumentType.getInteger(context, PAGE_ARGUMENT)))))
                 .then(Commands.literal("reset")
                         .requires(GameLootCommand::hasAdminPermission)
+                        .then(Commands.literal("all")
+                                .executes(this::requestResetAll)
+                                .then(Commands.literal("confirm").executes(this::confirmResetAll)))
                         .then(Commands.literal("container")
                                 .executes(this::resetContainer))
                         .then(Commands.literal("player")
@@ -126,9 +157,12 @@ public final class GameLootCommand {
             sender.sendMessage(Component.text("/gameloot inspect"));
             sender.sendMessage(Component.text("/gameloot claims"));
             sender.sendMessage(Component.text("/gameloot validate"));
+            sender.sendMessage(Component.text("/gameloot list [page]"));
+            sender.sendMessage(Component.text("/gameloot list csv"));
             sender.sendMessage(Component.text("/gameloot reset container"));
             sender.sendMessage(Component.text("/gameloot reset player <player>"));
             sender.sendMessage(Component.text("/gameloot reset player <player> container"));
+            sender.sendMessage(Component.text("/gameloot reset all"));
         }
 
         return Command.SINGLE_SUCCESS;
@@ -370,6 +404,116 @@ public final class GameLootCommand {
             case WARNING, UNVERIFIED -> NamedTextColor.YELLOW;
             case VALID -> NamedTextColor.GREEN;
         };
+    }
+
+    private int requestResetAll(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        confirmationService.request(senderKey(sender), RESET_ALL_ACTION);
+        sender.sendMessage(Component.text(
+                "Warning: this will delete every player claim for every registered GameLoot loot point.",
+                NamedTextColor.RED));
+        sender.sendMessage(Component.text("Loot-point registrations will NOT be removed.", NamedTextColor.YELLOW));
+        sender.sendMessage(Component.text("Run /gameloot reset all confirm within 30 seconds to continue.",
+                NamedTextColor.YELLOW));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int confirmResetAll(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        if (!confirmationService.consume(senderKey(sender), RESET_ALL_ACTION)) {
+            sender.sendMessage(Component.text(
+                    "No active reset-all confirmation. Run /gameloot reset all first.", NamedTextColor.RED));
+            return 0;
+        }
+        claimAdministrationService.resetAll().whenComplete((deleted, exception) -> runOnMainThread(() -> {
+            if (exception != null) {
+                sender.sendMessage(Component.text("Unable to reset all claims. No success was reported.",
+                        NamedTextColor.RED));
+                plugin.getLogger().log(java.util.logging.Level.SEVERE,
+                        "Failed to reset all claims for command sender " + senderKey(sender), exception);
+                return;
+            }
+            sender.sendMessage(Component.text("Reset " + deleted + " claim" + (deleted == 1 ? "" : "s")
+                    + ". Loot-point registrations were preserved.", NamedTextColor.GREEN));
+        }));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int list(CommandContext<CommandSourceStack> context, int requestedPage) {
+        CommandSender sender = context.getSource().getSender();
+        listingService.list().whenComplete((entries, exception) -> runOnMainThread(() -> {
+            if (exception != null) {
+                sender.sendMessage(Component.text("Unable to list GameLoot loot points.", NamedTextColor.RED));
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to list loot points", exception);
+                return;
+            }
+            try {
+                sendListPage(sender, Page.of(entries, requestedPage, LIST_PAGE_SIZE));
+            } catch (IllegalArgumentException pageError) {
+                int pages = Math.max(1, (entries.size() + LIST_PAGE_SIZE - 1) / LIST_PAGE_SIZE);
+                sender.sendMessage(Component.text("Page must be between 1 and " + pages + ".",
+                        NamedTextColor.RED));
+            }
+        }));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private int exportCsv(CommandContext<CommandSourceStack> context) {
+        CommandSender sender = context.getSource().getSender();
+        sender.sendMessage(Component.text("Exporting GameLoot loot points...", NamedTextColor.YELLOW));
+        csvExportService.export().whenComplete((result, exception) -> runOnMainThread(() -> {
+            if (exception != null) {
+                sender.sendMessage(Component.text("Unable to export GameLoot loot points.", NamedTextColor.RED));
+                plugin.getLogger().log(java.util.logging.Level.SEVERE, "Failed to export loot points to CSV",
+                        exception);
+                return;
+            }
+            sender.sendMessage(Component.text("Exported " + result.exported() + " GameLoot loot point"
+                    + (result.exported() == 1 ? "" : "s") + " to:", NamedTextColor.GREEN));
+            sender.sendMessage(Component.text(result.relativePath(), NamedTextColor.AQUA));
+        }));
+        return Command.SINGLE_SUCCESS;
+    }
+
+    private void sendListPage(CommandSender sender, Page<LootPointListEntry> page) {
+        sender.sendMessage(Component.text("GameLoot loot points — page " + page.page() + "/" + page.totalPages(),
+                NamedTextColor.GOLD));
+        if (page.totalEntries() == 0) {
+            sender.sendMessage(Component.text("No registered loot points.", NamedTextColor.YELLOW));
+            return;
+        }
+        int number = (page.page() - 1) * LIST_PAGE_SIZE + 1;
+        for (LootPointListEntry entry : page.entries()) {
+            String stale = entry.locationMayBeStale() ? " (persisted; may be stale)" : "";
+            sender.sendMessage(Component.text("#" + number++ + " " + entry.targetType() + " — "
+                    + entry.world() + ": " + entry.x() + " " + entry.y() + " " + entry.z() + stale));
+            String loot = entry.shelf() ? "Fixed shelf reward"
+                    : entry.lootTable() == null ? "-" : entry.lootTable().asString();
+            Component details = Component.text("Loot: " + loot);
+            if (entry.teleportCommand() != null) {
+                details = details.append(Component.text("  [Teleport]", NamedTextColor.AQUA)
+                        .clickEvent(ClickEvent.suggestCommand(entry.teleportCommand()))
+                        .hoverEvent(HoverEvent.showText(Component.text("Click to teleport"))));
+            }
+            sender.sendMessage(details);
+        }
+        Component navigation = Component.empty();
+        if (page.page() > 1) navigation = navigation.append(pageControl("Previous", page.page() - 1));
+        if (page.page() > 1 && page.page() < page.totalPages()) navigation = navigation.append(Component.space());
+        if (page.page() < page.totalPages()) navigation = navigation.append(pageControl("Next", page.page() + 1));
+        if (!navigation.equals(Component.empty())) sender.sendMessage(navigation);
+    }
+
+    private Component pageControl(String label, int page) {
+        return Component.text("[" + label + "]", NamedTextColor.AQUA)
+                .clickEvent(ClickEvent.runCommand("/gameloot list " + page))
+                .hoverEvent(HoverEvent.showText(Component.text("Go to page " + page)));
+    }
+
+    private String senderKey(CommandSender sender) {
+        if (sender instanceof Player player) return "player:" + player.getUniqueId();
+        if (sender instanceof ConsoleCommandSender) return "console";
+        return sender.getClass().getName() + ':' + sender.getName();
     }
 
     private int resetContainer(CommandContext<CommandSourceStack> context) {

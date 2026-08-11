@@ -12,6 +12,9 @@ import io.github.blackshadowhrd.gameloot.service.ClaimService;
 import io.github.blackshadowhrd.gameloot.service.ClaimAdministrationService;
 import io.github.blackshadowhrd.gameloot.service.LootGenerationService;
 import io.github.blackshadowhrd.gameloot.service.LootPointLookupService;
+import io.github.blackshadowhrd.gameloot.service.LootPointListingService;
+import io.github.blackshadowhrd.gameloot.service.LootPointCsvExporter;
+import io.github.blackshadowhrd.gameloot.service.LootPointCsvExportService;
 import io.github.blackshadowhrd.gameloot.service.LootPointPersistenceService;
 import io.github.blackshadowhrd.gameloot.service.LootPointProtectionService;
 import io.github.blackshadowhrd.gameloot.service.LootPointRegistrar;
@@ -22,10 +25,12 @@ import io.github.blackshadowhrd.gameloot.service.PrivateInventoryService;
 import io.github.blackshadowhrd.gameloot.service.LootPointTargetResolver;
 import io.github.blackshadowhrd.gameloot.service.ShelfRewardService;
 import io.github.blackshadowhrd.gameloot.service.ValidationService;
+import io.github.blackshadowhrd.gameloot.service.ConfirmationService;
 import io.papermc.paper.plugin.lifecycle.event.types.LifecycleEvents;
 import org.bukkit.plugin.java.JavaPlugin;
 
 import java.nio.file.Path;
+import java.time.Duration;
 
 public final class GameLootPlugin extends JavaPlugin {
 
@@ -67,6 +72,10 @@ public final class GameLootPlugin extends JavaPlugin {
 
         LootPointTargetResolver targetResolver = new LootPointTargetResolver();
         LootPointLookupService lookupService = new LootPointLookupService(this, persistenceService, targetResolver);
+        LootPointListingService listingService = new LootPointListingService(this, lootPointRepository, targetResolver);
+        LootPointCsvExportService csvExportService = new LootPointCsvExportService(
+                this, listingService, new LootPointCsvExporter(getDataFolder().toPath()));
+        ConfirmationService confirmationService = new ConfirmationService(Duration.ofSeconds(30));
         LootPointProtectionService protectionService = new LootPointProtectionService(lookupService);
         LootPointRegistrar registrar = new LootPointRegistrar(
                 this,
@@ -94,7 +103,10 @@ public final class GameLootPlugin extends JavaPlugin {
                 claimAdministrationService,
                 shelfRewardService,
                 validationService,
-                lootTableCatalog
+                lootTableCatalog,
+                listingService,
+                confirmationService,
+                csvExportService
         );
 
         getServer().getPluginManager().registerEvents(
@@ -119,6 +131,7 @@ public final class GameLootPlugin extends JavaPlugin {
         );
         getServer().getPluginManager().registerEvents(lootTableCatalog, this);
         lootTableCatalog.refresh();
+        getServer().getScheduler().runTaskTimer(this, confirmationService::purgeExpired, 20L, 20L);
 
         getLifecycleManager().registerEventHandler(
                 LifecycleEvents.COMMANDS,

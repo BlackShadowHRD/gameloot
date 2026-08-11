@@ -25,9 +25,13 @@ memory and reset when the server restarts.
 | `/gameloot inspect` | `gameloot.admin` | Shows the target's registration status, ID, type, loot table, and location. |
 | `/gameloot claims` | `gameloot.admin` | Shows claim information for the targeted loot point. |
 | `/gameloot validate` | `gameloot.admin` | Checks database and loaded-world registration consistency. |
+| `/gameloot list [page]` | `gameloot.admin` | Lists registered loot points with paginated teleport suggestions. |
+| `/gameloot list csv` | `gameloot.admin` | Exports every registered loot point to a timestamped CSV file. |
 | `/gameloot reset container` | `gameloot.admin` | Resets every claim for the targeted loot point. |
 | `/gameloot reset player <player>` | `gameloot.admin` | Resets every claim belonging to a player UUID. |
 | `/gameloot reset player <player> container` | `gameloot.admin` | Resets one player's claim for the targeted loot point. |
+| `/gameloot reset all` | `gameloot.admin` | Requests confirmation to clear every player claim. |
+| `/gameloot reset all confirm` | `gameloot.admin` | Confirms a pending reset-all request within 30 seconds. |
 
 Registration commands require a player to look at a supported container within
 six blocks. The `gameloot.admin` permission is granted to server operators by
@@ -171,6 +175,23 @@ Claim resets update SQLite first and then update the in-memory claim cache.
 Successful resets also invalidate affected active private inventories on the
 server thread. This prevents stale claimed sessions from remaining open while
 allowing the next interaction to create a fresh session safely.
+
+`/gameloot reset all` is destructive but removes claims only. It does not
+remove registrations, PDC markers, loot-table assignments, or shelf rewards.
+The same sender must run `/gameloot reset all confirm` within 30 seconds.
+
+`/gameloot list [page]` displays ten registrations per page in stable world UUID
+and coordinate order. Loaded worlds use their names; unavailable worlds show
+their UUID. Teleport controls suggest a cross-world command without loading
+chunks. Loaded chest minecarts use their current position; otherwise their
+persisted location is marked as potentially stale.
+
+`/gameloot list csv` exports all registrations in the same deterministic order
+to `plugins/GameLoot/exports/`. Files use timestamped names and are never
+overwritten. The UTF-8 columns are `id`, `target_type`, `world`, `world_uuid`,
+`x`, `y`, `z`, `entity_uuid`, `loot_mode`, `loot_table`, and
+`teleport_command`. Shelves use `FIXED` with a blank `loot_table`; other targets
+use `LOOT_TABLE`.
 
 ## Building
 

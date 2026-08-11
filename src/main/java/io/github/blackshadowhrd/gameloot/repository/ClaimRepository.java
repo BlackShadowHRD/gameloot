@@ -78,6 +78,14 @@ public final class ClaimRepository {
         return deleteWhere("DELETE FROM loot_claims WHERE loot_point_id = ?", lootPointId);
     }
 
+    public CompletableFuture<Integer> deleteAll() {
+        return databaseManager.submit(connection -> {
+            try (PreparedStatement statement = connection.prepareStatement("DELETE FROM loot_claims")) {
+                return statement.executeUpdate();
+            }
+        });
+    }
+
     private CompletableFuture<Integer> deleteWhere(String sql, UUID... ids) {
         return databaseManager.submit(connection -> {
             try (PreparedStatement statement = connection.prepareStatement(sql)) {

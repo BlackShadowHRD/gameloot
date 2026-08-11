@@ -54,6 +54,9 @@ Implemented:
   reward validation
 - Cached Brigadier autocomplete for loaded `gameloot:*` datapack loot tables
 - Automatic custom loot-table catalog refresh after datapack resource reloads
+- Confirmed reset of all player claims without removing loot-point registrations
+- Paginated administrative loot-point listing with teleport suggestions
+- CSV export of all registered loot points from `/gameloot list csv`
 
 Not yet implemented:
 

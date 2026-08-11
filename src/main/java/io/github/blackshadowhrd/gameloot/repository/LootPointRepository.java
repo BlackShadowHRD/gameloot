@@ -39,6 +39,12 @@ public final class LootPointRepository {
         return databaseManager.executeBlocking(this::findAll);
     }
 
+    public CompletableFuture<List<LootPointRecord>> findAllOrdered() {
+        return databaseManager.submit(connection -> findAll(connection, """
+                SELECT * FROM loot_points ORDER BY world_uuid, x, z, y, id
+                """));
+    }
+
     public CompletableFuture<Optional<LootPointRecord>> findById(UUID id) {
         return databaseManager.submit(connection -> findById(connection, id));
     }
@@ -139,8 +145,12 @@ public final class LootPointRepository {
     }
 
     private List<LootPointRecord> findAll(Connection connection) throws SQLException {
+        return findAll(connection, "SELECT * FROM loot_points");
+    }
+
+    private List<LootPointRecord> findAll(Connection connection, String sql) throws SQLException {
         List<LootPointRecord> records = new ArrayList<>();
-        try (PreparedStatement statement = connection.prepareStatement("SELECT * FROM loot_points");
+        try (PreparedStatement statement = connection.prepareStatement(sql);
              ResultSet result = statement.executeQuery()) {
             while (result.next()) {
                 records.add(readRecord(result));

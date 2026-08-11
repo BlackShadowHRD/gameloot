@@ -260,6 +260,20 @@ class RepositoryIntegrationTest {
         assertTrue(report.violations().stream().anyMatch(value -> value.contains("loot_claims")));
     }
 
+    @Test
+    void listsLootPointsInDeterministicWorldAndCoordinateOrder() {
+        UUID world = UUID.randomUUID();
+        LootPointRecord later = new LootPointRecord(UUID.randomUUID(), world, LootPointType.BLOCK_CONTAINER,
+                20, 60, 5, null, NamespacedKey.minecraft("chests/simple_dungeon"), 1L, null);
+        LootPointRecord first = new LootPointRecord(UUID.randomUUID(), world, LootPointType.BLOCK_CONTAINER,
+                10, 70, 9, null, NamespacedKey.minecraft("chests/simple_dungeon"), 2L, null);
+        lootPoints.insert(later).join();
+        lootPoints.insert(first).join();
+
+        assertEquals(java.util.List.of(first.id(), later.id()), lootPoints.findAllOrdered().join().stream()
+                .map(LootPointRecord::id).toList());
+    }
+
     private void openDatabase() {
         databaseManager = new DatabaseManager(databasePath, Logger.getLogger("GameLootTest"));
         databaseManager.initialize(databasePath);

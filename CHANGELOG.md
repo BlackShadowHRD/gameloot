@@ -64,6 +64,12 @@ All notable changes to GameLoot are documented in this file.
 - Cached autocomplete for loaded `gameloot:*` loot tables discovered from
   enabled directory and ZIP datapacks, with automatic refresh after datapack
   resource reloads.
+- Sender-scoped, expiring confirmation for `/gameloot reset all confirm`, with
+  atomic claim-cache clearing and active-session invalidation.
+- Paginated `/gameloot list [page]` output with deterministic ordering,
+  world-aware locations, shelf labels, and clickable teleport suggestions.
+- UTF-8 `/gameloot list csv` export using the same stable ordering,
+  RFC-compatible escaping, and collision-safe timestamped files.
 
 ### Changed
 

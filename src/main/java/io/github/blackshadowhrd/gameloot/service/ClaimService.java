@@ -12,6 +12,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ClaimService {
 
@@ -19,6 +20,8 @@ public final class ClaimService {
     private final Logger logger;
     private final Clock clock;
     private final Map<ClaimKey, ClaimState> claims = new ConcurrentHashMap<>();
+    private final Object claimOperationGate = new Object();
+    private final AtomicBoolean resetAllInProgress = new AtomicBoolean();
 
     public ClaimService(ClaimRepository repository, Logger logger) {
         this(repository, logger, Clock.systemUTC());
@@ -55,12 +58,15 @@ public final class ClaimService {
 
     public CompletableFuture<Boolean> markClaimed(UUID playerId, UUID lootPointId) {
         ClaimKey key = new ClaimKey(playerId, lootPointId);
-        if (claims.putIfAbsent(key, ClaimState.PENDING) != null) {
-            return CompletableFuture.completedFuture(false);
+        CompletableFuture<Boolean> insertion;
+        synchronized (claimOperationGate) {
+            if (resetAllInProgress.get() || claims.putIfAbsent(key, ClaimState.PENDING) != null) {
+                return CompletableFuture.completedFuture(false);
+            }
+            ClaimRecord claim = new ClaimRecord(playerId, lootPointId, clock.millis());
+            insertion = repository.insert(claim);
         }
-
-        ClaimRecord claim = new ClaimRecord(playerId, lootPointId, clock.millis());
-        return repository.insert(claim).handle((inserted, exception) -> {
+        return insertion.handle((inserted, exception) -> {
             if (exception != null) {
                 claims.put(key, ClaimState.FAILED);
                 logger.log(Level.SEVERE, "Failed to persist claim for player " + playerId
@@ -96,6 +102,25 @@ public final class ClaimService {
                 deleted,
                 key -> key.lootPointId().equals(lootPointId)
         ));
+    }
+
+    public CompletableFuture<ClaimResetResult> resetAll() {
+        CompletableFuture<Integer> deletion;
+        synchronized (claimOperationGate) {
+            if (!resetAllInProgress.compareAndSet(false, true)) {
+                return CompletableFuture.failedFuture(new IllegalStateException("Claim reset already in progress"));
+            }
+            deletion = repository.deleteAll();
+        }
+        return deletion.thenApply(deleted -> {
+            Set<ClaimKey> removed = Set.copyOf(claims.keySet());
+            claims.clear();
+            return new ClaimResetResult(deleted, removed);
+        });
+    }
+
+    void finishResetAll() {
+        resetAllInProgress.set(false);
     }
 
     private ClaimResetResult resetCache(int deleted, java.util.function.Predicate<ClaimKey> predicate) {

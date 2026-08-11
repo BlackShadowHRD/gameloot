@@ -112,6 +112,25 @@ class ClaimServiceIntegrationTest {
         assertTrue(claims.isClaimed(secondPlayer, shelf.id()));
     }
 
+    @Test
+    void resetAllClearsDatabaseAndCacheButPreservesRegistrations() {
+        LootPointRecord first = insertPoint();
+        LootPointRecord second = insertPoint();
+        UUID player = UUID.randomUUID();
+        claims.markClaimed(player, first.id()).join();
+        claims.markClaimed(player, second.id()).join();
+
+        ClaimService.ClaimResetResult result = claims.resetAll().join();
+        claims.finishResetAll();
+
+        assertEquals(2, result.deletedClaims());
+        assertFalse(claims.isClaimed(player, first.id()));
+        assertFalse(claims.isClaimed(player, second.id()));
+        assertEquals(2, lootPoints.findAllBlocking().size());
+        claims.load();
+        assertEquals(0, claims.countPersistedClaims(first.id()));
+    }
+
     private LootPointRecord insertPoint() {
         LootPointRecord point = new LootPointRecord(
                 UUID.randomUUID(),
